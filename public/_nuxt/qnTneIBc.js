@@ -1,0 +1,1 @@
+import{l as o,o as n,w as s,a1 as _,_ as f}from"./Dn4piMSu.js";const l={__name:"ProseA",props:{href:{type:String,default:""},target:{type:String,default:void 0,required:!1}},setup(e){const t=e;return(r,p)=>{const a=f;return n(),o(a,{href:t.href,target:t.target},{default:s(()=>[_(r.$slots,"default")]),_:3},8,["href","target"])}}};export{l as default};

@@ -1,0 +1,1 @@
+import{a7 as i,f as o,v as e}from"./Dn4piMSu.js";const c=i("giveaways-store",()=>{const a=o(),s=e([]),t=e([]),n=e([]);return{drawingSoonGiveaways:s,justLaunchedGiveaways:t,fetch:async()=>{s.value=await a.giveaways.getDrawingSoon(6),t.value=await a.giveaways.getJustLaunched(6),n.value=await a.giveaways.getWinners()},winners:n}});export{c as u};

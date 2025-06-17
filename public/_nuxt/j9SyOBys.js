@@ -1,0 +1,1 @@
+import{a0 as r,f as o,D as a}from"./Dn4piMSu.js";const n=r((s,u)=>{const t=o();if(!t.authData.accessToken||!t.authData.expires||t.authData.expires>Date.now())return t.clearAuth(),a("/auth/login");try{if(!t.getUser())throw-1}catch{return t.clearAuth(),a("/auth/login")}});export{n as default};
