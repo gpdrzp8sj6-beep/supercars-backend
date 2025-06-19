@@ -10,9 +10,7 @@ use App\Http\Controllers\Orders\OrdersController;
 use App\Http\Controllers\Payment\PaymentController;
 use App\Models\SiteSettings;
 use Illuminate\Support\Facades\Route;
-
 Route::post('/payment/webhook', [PaymentController::class, 'handle']);
-
 Route::prefix('giveaways')->group(function () {
     Route::get('drawing-soon', [GiveawaysController::class, 'getDrawingSoon']);
     Route::get('just-launched', [GiveawaysController::class, 'getJustLaunched']);
