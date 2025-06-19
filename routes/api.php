@@ -11,6 +11,8 @@ use App\Http\Controllers\Payment\PaymentController;
 use App\Models\SiteSettings;
 use Illuminate\Support\Facades\Route;
 
+Route::post('/payment/webhook', [PaymentController::class, 'handle']);
+
 Route::prefix('giveaways')->group(function () {
     Route::get('drawing-soon', [GiveawaysController::class, 'getDrawingSoon']);
     Route::get('just-launched', [GiveawaysController::class, 'getJustLaunched']);
@@ -29,7 +31,6 @@ Route::middleware('auth:api')->group(function () {
     });
 });
 
-Route::post('/paymentWebhook', [PaymentController::class, 'handle']);
 Route::get('/settings', function () {
     return response()->json(SiteSettings::first());
 });
