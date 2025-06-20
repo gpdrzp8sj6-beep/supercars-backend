@@ -95,7 +95,6 @@ public function handle(Request $request)
                         "&currency=GBP" .
                         "&testMode=EXTERNAL" .
                         "&paymentType=DB" .
-                        "&integrity=true" .
                         "&customer.email=" . $user->email .
                         "&customer.givenName=" . $user->forenames;
 
@@ -115,7 +114,6 @@ public function handle(Request $request)
             $exp = [];
             $exp["status"] = true;
             $exp["checkoutId"] = $responseData["id"];
-            $exp["integrity"] = $responseData["integrity"];
     	    return response()->json($exp);
     	} catch(Exception $err) {
     	    return response()->json(["status" => false]);
