@@ -95,17 +95,17 @@ public function handle(Request $request)
                         "&currency=GBP" .
                         "&testMode=EXTERNAL" .
                         "&paymentType=DB" .
-                        "&integrity=true" .
+                        "&integrity=false" .
                         "&customer.email=" . $user->email .
                         "&customer.givenName=" . $user->forenames;
 
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, $url);
             curl_setopt($ch, CURLOPT_HTTPHEADER, array(
-                           'Authorization:Bearer OGFjOWE0Y2M5NjYyYWIxZDAxOTY2ODdkNjFhMjI5MzN8UWltamM6IWZIRVpBejMlcnBiZzY='));
+                           'Authorization: Bearer OGFjOWE0Y2M5NjYyYWIxZDAxOTY2ODdkNjFhMjI5MzN8UWltamM6IWZIRVpBejMlcnBiZzY='));
             curl_setopt($ch, CURLOPT_POST, 1);
             curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
-            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);// this should be set to true in production
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);// this should be set to true in production
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             $responseData = json_decode(curl_exec($ch), true);
             if(curl_errno($ch)) {
@@ -116,7 +116,7 @@ public function handle(Request $request)
             $exp["status"] = true;
             $exp["checkoutId"] = $responseData["id"];
             $exp["integrity"] = $responseData["integrity"];
-    	    return response()->json($responseData);
+    	    return response()->json($exp);
     	} catch(Exception $err) {
     	    return response()->json(["status" => false]);
     	}
