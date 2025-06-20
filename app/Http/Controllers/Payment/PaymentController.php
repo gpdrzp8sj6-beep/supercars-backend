@@ -93,7 +93,6 @@ public function handle(Request $request)
             $data = "entityId=8ac9a4cd9662a1bc0196687d626128ad" .
                         "&amount=" . $amount .
                         "&currency=GBP" .
-                        "&testMode=EXTERNAL" .
                         "&paymentType=DB" .
                         "&customer.email=" . $user->email .
                         "&customer.givenName=" . $user->forenames;
@@ -111,10 +110,10 @@ public function handle(Request $request)
                 return curl_error($ch);
             }
             curl_close($ch);
-//             $exp = [];
-//             $exp["status"] = true;
-//             $exp["checkoutId"] = $responseData["id"];
-    	    return response()->json($responseData);
+            $exp = [];
+            $exp["status"] = true;
+            $exp["checkoutId"] = $responseData["id"];
+    	    return response()->json($exp);
     	} catch(Exception $err) {
     	    return response()->json(["status" => false]);
     	}
