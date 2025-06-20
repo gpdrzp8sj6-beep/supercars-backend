@@ -6,7 +6,7 @@ use Illuminate\Console\Command;
 use App\Models\Order;
 use Carbon\Carbon;
 
-class validate-checkout extends Command
+class ValidateCheckouts extends Command
 {
     /**
      * The name and signature of the console command.
@@ -15,14 +15,6 @@ class validate-checkout extends Command
      */
     protected $signature = 'app:validate-checkout';
     protected $description = 'Validate pending checkouts and update their status';
-
-
-    /**
-     * The console command description.
-     *
-     * @var string
-     */
-    protected $description = 'Command description';
 
     /**
      * Execute the console command.
