@@ -111,10 +111,10 @@ public function handle(Request $request)
                 return curl_error($ch);
             }
             curl_close($ch);
-            $exp = [];
-            $exp["status"] = true;
-            $exp["checkoutId"] = $responseData["id"];
-    	    return response()->json($exp);
+//             $exp = [];
+//             $exp["status"] = true;
+//             $exp["checkoutId"] = $responseData["id"];
+    	    return response()->json($responseData);
     	} catch(Exception $err) {
     	    return response()->json(["status" => false]);
     	}
