@@ -95,7 +95,7 @@ public function handle(Request $request)
                         "&currency=GBP" .
                         "&testMode=EXTERNAL" .
                         "&paymentType=DB" .
-                        "&integrity=false" .
+                        "&integrity=true" .
                         "&customer.email=" . $user->email .
                         "&customer.givenName=" . $user->forenames;
 
