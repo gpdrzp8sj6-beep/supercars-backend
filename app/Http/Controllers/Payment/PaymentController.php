@@ -90,7 +90,7 @@ public function handle(Request $request)
             $amount = $request->amount;
 
             $url = "https://eu-test.oppwa.com/v1/checkouts";
-            $data = "entityId=8c070152f2aa42279c0d60a1a9ec34ee" .
+            $data = "entityId=8ac9a4cd9662a1bc0196687d626128ad" .
                         "&amount=" . $amount .
                         "&currency=GBP" .
                         "&paymentType=DB" .
@@ -101,7 +101,7 @@ public function handle(Request $request)
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, $url);
             curl_setopt($ch, CURLOPT_HTTPHEADER, array(
-                           'Authorization:Bearer OGE4Mjk0MTc1NjdkOTUyODAxNTY4ZDlkOWU5ZjBiODh8WHFkJWohS0NZVXpkPzRnWFJpbjM='));
+                           'Authorization:Bearer OGFjOWE0Y2M5NjYyYWIxZDAxOTY2ODdkNjFhMjI5MzN8UWltamM6IWZIRVpBejMlcnBiZzY='));
             curl_setopt($ch, CURLOPT_POST, 1);
             curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);// this should be set to true in production
