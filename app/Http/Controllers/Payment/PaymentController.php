@@ -125,7 +125,7 @@ public function handle(Request $request)
             $exp["status"] = true;
             $exp["checkoutId"] = $responseData["id"];
 
-            $order->checkoutId = (int) $exp["checkoutId"]; // cast to int
+            $order->checkoutId = $exp["checkoutId"];
             $order->save();
 
     	    return response()->json($exp);

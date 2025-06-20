@@ -16,7 +16,7 @@ return new class extends Migration
            $table->foreignId('user_id')->constrained()->onDelete('cascade');
            $table->enum('status', ['completed', 'pending', 'cancelled', 'failed'])->default('pending');
            $table->double('total');
-           $table->integer('checkoutId')->nullable();
+           $table->string('checkoutId')->nullable();
 
            // Add the extra user/address fields
            $table->string('forenames');
