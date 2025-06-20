@@ -83,9 +83,19 @@ public function handle(Request $request)
         try {
             $request->validate([
                         'amount' => 'required|numeric',
+                        'orderId' => 'required|numeric|exists:orders,id',
                     ]);
 
             $user = $request->user();
+            $order = Order::where('id', $request->orderId)
+                              ->where('user_id', $user->id)
+                              ->first();
+
+            if (!$order) {
+                    return response()->json([
+                        'message' => 'Order not found',
+                    ], 403);
+                }
 
             $amount = $request->amount;
 
@@ -113,6 +123,10 @@ public function handle(Request $request)
             $exp = [];
             $exp["status"] = true;
             $exp["checkoutId"] = $responseData["id"];
+
+            $order->checkoutId = (int) $exp["checkoutId"]; // cast to int
+            $order->save();
+
     	    return response()->json($exp);
     	} catch(Exception $err) {
     	    return response()->json(["status" => false]);

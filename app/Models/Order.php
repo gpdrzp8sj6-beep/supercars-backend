@@ -20,6 +20,7 @@ class Order extends Model
           'city',
           'post_code',
           'country',
+          'checkoutId'
       ];
 
     protected function casts() {
