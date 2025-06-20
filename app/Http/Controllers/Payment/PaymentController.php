@@ -116,8 +116,7 @@ public function handle(Request $request)
             $exp["status"] = true;
             $exp["checkoutId"] = $responseData["id"];
             $exp["integrity"] = $responseData["integrity"];
-            dd($responseData);
-    	    return response()->json($exp);
+    	    return response()->json($responseData);
     	} catch(Exception $err) {
     	    return response()->json(["status" => false]);
     	}
