@@ -16,7 +16,7 @@ class OrdersController extends Controller
     public function index(Request $request): JsonResponse
     {
        $user = $request->user();
-       $orders = $user->orders()->with('giveaways')->get();
+       $orders = $user->orders()->with('giveaways')->orderBy('id', 'desc')->get();
        return response()->json($orders, 200);
     }
 
