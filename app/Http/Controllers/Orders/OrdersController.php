@@ -23,8 +23,10 @@ class OrdersController extends Controller
     protected function getAssignedNumbersForGiveaway(int $giveawayId): Collection
     {
         return DB::table('giveaway_order')
-            ->where('giveaway_id', $giveawayId)
-            ->pluck('numbers')
+            ->join('orders', 'giveaway_order.order_id', '=', 'orders.id')
+            ->where('giveaway_order.giveaway_id', $giveawayId)
+            ->where('orders.status', 'completed')
+            ->pluck('giveaway_order.numbers')
             ->filter()
             ->flatMap(function ($jsonNumbers) {
                 return json_decode($jsonNumbers, true) ?: [];
