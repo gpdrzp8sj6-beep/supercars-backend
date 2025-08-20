@@ -14,6 +14,15 @@ class ValidateCheckouts extends Command
     public function handle()
     {
         Order::where('status', 'pending')->each(function ($order) {
+            // Auto-complete zero-amount orders and skip timeout logic
+            if ((float)$order->total === 0.0) {
+                if ($order->status !== 'completed') {
+                    $order->update(['status' => 'completed']);
+                    $this->info("Order {$order->id} marked as completed (zero-amount).");
+                }
+                return;
+            }
+
             if ($order->created_at->lt(Carbon::now()->subMinutes(10))) {
                 $order->update(['status' => 'failed']);
                 $this->info("Order {$order->id} marked as failed (timeout).");

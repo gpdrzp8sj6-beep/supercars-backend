@@ -100,6 +100,15 @@ public function handle(Request $request)
 
             $amount = $request->amount;
 
+            // For zero-amount orders, no checkout is required
+            if ((float)$amount === 0.0 || (float)($order->total ?? 0) === 0.0) {
+                return response()->json([
+                    'status' => true,
+                    'checkoutId' => null,
+                    'message' => 'No checkout required for zero-amount order'
+                ]);
+            }
+
             $url = "https://eu-prod.oppwa.com/v1/checkouts";
             $data = "entityId=8ac9a4cd9662a1bc0196687d626128ad" .
                         "&amount=" . $amount .

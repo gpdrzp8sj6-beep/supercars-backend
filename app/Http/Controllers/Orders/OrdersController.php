@@ -88,7 +88,7 @@ class OrdersController extends Controller
         DB::transaction(function () use ($request, $user, $total, $giveaways, &$order) {
             $order = Order::create([
                 'user_id' => $user->id,
-                'status' => 'pending',
+                'status' => $total == 0 ? 'completed' : 'pending',
                 'total' => $total,
                 'forenames' => $request->forenames,
                 'surname' => $request->surname,
