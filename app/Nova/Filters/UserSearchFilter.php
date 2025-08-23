@@ -3,10 +3,17 @@
 namespace App\Nova\Filters;
 
 use Illuminate\Http\Request;
-use Laravel\Nova\Filters\TextFilter;
+use Laravel\Nova\Filters\Filter;
 
-class UserSearchFilter extends TextFilter
+class UserSearchFilter extends Filter
 {
+    /**
+     * Use the built-in text filter Vue component.
+     * Nova 5.7 may not ship the TextFilter PHP class, but the component exists.
+     *
+     * @var string
+     */
+    public $component = 'text-filter';
     /**
      * Apply the filter to the given query.
      *
