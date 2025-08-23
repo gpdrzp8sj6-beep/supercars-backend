@@ -23,11 +23,15 @@ class UserFilter extends Filter
 
     public function options(Request $request)
     {
+        // Build [label => value] using fullName accessor
         return User::query()
-            ->orderBy('name')
-            ->limit(500)
+            ->orderBy('forenames')
+            ->orderBy('surname')
+            ->limit(1000)
             ->get()
-            ->pluck('id', 'name')
+            ->mapWithKeys(function ($user) {
+                return [$user->fullName => $user->id];
+            })
             ->toArray();
     }
 }
