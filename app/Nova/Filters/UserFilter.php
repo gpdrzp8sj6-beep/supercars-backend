@@ -23,14 +23,15 @@ class UserFilter extends Filter
 
     public function options(Request $request)
     {
-        // Build [label => value] using fullName accessor
+        // Only users who have at least one order; smaller, faster dropdown
         return User::query()
+            ->whereHas('orders')
             ->orderBy('forenames')
             ->orderBy('surname')
             ->limit(1000)
             ->get()
             ->mapWithKeys(function ($user) {
-                return [$user->fullName => $user->id];
+                return [$user->fullName . ' (' . $user->email . ')' => $user->id];
             })
             ->toArray();
     }

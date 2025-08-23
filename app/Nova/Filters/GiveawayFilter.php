@@ -23,6 +23,10 @@ class GiveawayFilter extends Filter
         if (!$value) {
             return $query;
         }
+        // Accept single or multiple values
+        if (is_array($value)) {
+            return $query->whereIn('giveaway_id', $value);
+        }
         return $query->where('giveaway_id', $value);
     }
 
