@@ -14,6 +14,7 @@ use App\Nova\Filters\WinnerFilter;
 use App\Nova\Filters\UserFilter;
 use App\Nova\Filters\OrderFilter;
 use App\Nova\Actions\ExportTickets;
+use Illuminate\Contracts\Database\Eloquent\Builder;
 
 class Ticket extends Resource
 {
@@ -127,7 +128,7 @@ class Ticket extends Resource
     /**
      * Customize the index query to support searching related models.
      */
-    public static function indexQuery(NovaRequest $request, $query)
+    public static function indexQuery(NovaRequest $request, \Illuminate\Contracts\Database\Eloquent\Builder $query): \Illuminate\Contracts\Database\Eloquent\Builder
     {
         $query = parent::indexQuery($request, $query);
 
