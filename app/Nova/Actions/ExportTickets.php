@@ -41,7 +41,7 @@ class ExportTickets extends Action
                 optional($giveaway)->id,
                 optional($giveaway)->title,
                 optional(optional($order)->user)->id,
-                optional(optional($order)->user)->name,
+                optional(optional($order)->user)->fullName,
                 optional(optional($order)->user)->email,
                 is_string($ticket->numbers) ? $ticket->numbers : json_encode($ticket->numbers),
                 $ticket->is_winner ? '1' : '0',

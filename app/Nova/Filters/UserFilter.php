@@ -15,9 +15,13 @@ class UserFilter extends Filter
         if (!$value) {
             return $query;
         }
-        // Filter tickets by related order's user_id
+        // Filter tickets by related order's user_id (support single or multiple values)
         return $query->whereHas('order', function ($q) use ($value) {
-            $q->where('user_id', $value);
+            if (is_array($value)) {
+                $q->whereIn('user_id', $value);
+            } else {
+                $q->where('user_id', $value);
+            }
         });
     }
 

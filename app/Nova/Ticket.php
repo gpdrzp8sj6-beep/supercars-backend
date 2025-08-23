@@ -97,12 +97,10 @@ class Ticket extends Resource
     public function filters(NovaRequest $request): array
     {
         return [
-            new GiveawayFilter(),
+            (new GiveawayFilter())->searchable(),
             new WinnerFilter(),
-            // Keep dropdown filter, and add a text search filter for large lists
-            new UserFilter(),
-            new UserSearchFilter(),
-            new OrderFilter(),
+            (new UserFilter())->searchable(),
+            (new OrderFilter())->searchable(),
         ];
     }
 

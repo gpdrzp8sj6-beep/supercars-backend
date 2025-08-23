@@ -15,6 +15,9 @@ class OrderFilter extends Filter
         if (!$value) {
             return $query;
         }
+        if (is_array($value)) {
+            return $query->whereIn('order_id', $value);
+        }
         return $query->where('order_id', $value);
     }
 
