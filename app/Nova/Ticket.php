@@ -12,6 +12,7 @@ use Laravel\Nova\Http\Requests\NovaRequest;
 use App\Nova\Filters\GiveawayFilter;
 use App\Nova\Filters\WinnerFilter;
 use App\Nova\Filters\UserFilter;
+use App\Nova\Filters\UserSearchFilter;
 use App\Nova\Filters\OrderFilter;
 use App\Nova\Actions\ExportTickets;
 use Illuminate\Contracts\Database\Eloquent\Builder;
@@ -98,7 +99,9 @@ class Ticket extends Resource
         return [
             new GiveawayFilter(),
             new WinnerFilter(),
+            // Keep dropdown filter, and add a text search filter for large lists
             new UserFilter(),
+            new UserSearchFilter(),
             new OrderFilter(),
         ];
     }
@@ -142,7 +145,9 @@ class Ticket extends Resource
                       $g->where('title', 'like', "%{$search}%");
                   })
                   ->orWhereHas('order.user', function ($u) use ($search) {
-                      $u->where('name', 'like', "%{$search}%")
+                      $u->where('forenames', 'like', "%{$search}%")
+                        ->orWhere('surname', 'like', "%{$search}%")
+                        ->orWhereRaw("CONCAT(forenames, ' ', surname) LIKE ?", ["%{$search}%"]) // full name
                         ->orWhere('email', 'like', "%{$search}%");
                   });
             });
