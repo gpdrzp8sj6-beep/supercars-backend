@@ -9,6 +9,11 @@ use Laravel\Nova\Fields\Boolean;
 use Laravel\Nova\Fields\BelongsTo;
 use Laravel\Nova\Fields\Number;
 use Laravel\Nova\Http\Requests\NovaRequest;
+use App\Nova\Filters\GiveawayFilter;
+use App\Nova\Filters\WinnerFilter;
+use App\Nova\Filters\UserFilter;
+use App\Nova\Filters\OrderFilter;
+use App\Nova\Actions\ExportTickets;
 
 class Ticket extends Resource
 {
@@ -33,6 +38,18 @@ class Ticket extends Resource
      */
     public static $search = [
         'id',
+        'numbers',
+        'winning_ticket',
+    ];
+
+    /**
+     * Also search related models.
+     * @var array
+     */
+    public static $searchRelations = [
+        'giveaway' => ['title'],
+        'order' => ['id'],
+        'order.user' => ['name', 'email'],
     ];
 
     /**
@@ -77,7 +94,12 @@ class Ticket extends Resource
      */
     public function filters(NovaRequest $request): array
     {
-        return [];
+        return [
+            new GiveawayFilter(),
+            new WinnerFilter(),
+            new UserFilter(),
+            new OrderFilter(),
+        ];
     }
 
     /**
@@ -97,6 +119,34 @@ class Ticket extends Resource
      */
     public function actions(NovaRequest $request): array
     {
-        return [];
+        return [
+            new ExportTickets(),
+        ];
+    }
+
+    /**
+     * Customize the index query to support searching related models.
+     */
+    public static function indexQuery(NovaRequest $request, $query)
+    {
+        $query = parent::indexQuery($request, $query);
+
+        $search = trim((string) $request->get('search'));
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('id', 'like', "%{$search}%")
+                  ->orWhere('numbers', 'like', "%{$search}%")
+                  ->orWhere('winning_ticket', 'like', "%{$search}%")
+                  ->orWhereHas('giveaway', function ($g) use ($search) {
+                      $g->where('title', 'like', "%{$search}%");
+                  })
+                  ->orWhereHas('order.user', function ($u) use ($search) {
+                      $u->where('name', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%");
+                  });
+            });
+        }
+
+        return $query;
     }
 }

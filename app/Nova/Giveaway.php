@@ -72,6 +72,12 @@ class Giveaway extends Resource
             Currency::make('Alternative prize', 'alternative_prize'),
             Currency::make('Price per ticket', 'price'),
             Number::make('Total Tickets', 'ticketsTotal'),
+            Text::make('Remaining Tickets', function () {
+                $total = (int) ($this->ticketsTotal ?? 0);
+                $sold = (int) ($this->ticketsSold ?? 0);
+                $remaining = max(0, $total - $sold);
+                return (string) $remaining;
+            })->onlyOnDetail()->readonly(),
             Number::make('Tickets per User', 'ticketsPerUser'),
             Number::make('No. of winners', 'manyWinners'),
             Boolean::make('Auto draw', 'autoDraw'),
