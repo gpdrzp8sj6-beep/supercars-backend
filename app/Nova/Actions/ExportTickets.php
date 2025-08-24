@@ -26,7 +26,7 @@ class ExportTickets extends Action
      */
     public function handle(ActionFields $fields, Collection $models)
     {
-        $headers = ['ID','Order ID','Giveaway ID','Giveaway Title','User ID','User Name','User Email','Numbers','Is Winner','Winning Ticket','Created At'];
+        $headers = ['ID', 'Giveaway Title', 'User Name', 'Numbers'];
 
         $lines = [];
         $lines[] = implode(',', $this->escapeRow($headers));
@@ -37,16 +37,9 @@ class ExportTickets extends Action
 
             $row = [
                 $ticket->id,
-                optional($order)->id,
-                optional($giveaway)->id,
                 optional($giveaway)->title,
-                optional(optional($order)->user)->id,
                 optional(optional($order)->user)->fullName,
-                optional(optional($order)->user)->email,
                 is_string($ticket->numbers) ? $ticket->numbers : json_encode($ticket->numbers),
-                $ticket->is_winner ? '1' : '0',
-                $ticket->winning_ticket,
-                $ticket->created_at,
             ];
             $lines[] = implode(',', $this->escapeRow($row));
         }

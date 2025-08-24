@@ -109,9 +109,32 @@ class OrdersController extends Controller
 
                 $giveaway = $giveaways->get($giveawayId);
 
+                // Enforce per-order limit
                 if ($amount > $giveaway->ticketsPerUser) {
                     throw ValidationException::withMessages([
                         'cart' => ["Amount for giveaway ID {$giveawayId} exceeds ticketsPerUser limit."],
+                    ]);
+                }
+
+                // Enforce cumulative per-user limit across previous completed orders
+                $existingUserNumbers = DB::table('giveaway_order')
+                    ->join('orders', 'giveaway_order.order_id', '=', 'orders.id')
+                    ->where('orders.user_id', $user->id)
+                    ->where('orders.status', 'completed')
+                    ->where('giveaway_order.giveaway_id', $giveawayId)
+                    ->pluck('giveaway_order.numbers')
+                    ->filter()
+                    ->flatMap(function ($jsonNumbers) {
+                        return json_decode($jsonNumbers, true) ?: [];
+                    });
+
+                $existingCountForUser = $existingUserNumbers->count();
+                if (($existingCountForUser + $amount) > $giveaway->ticketsPerUser) {
+                    throw ValidationException::withMessages([
+                        'cart' => [
+                            "You already have {$existingCountForUser} ticket(s) for giveaway ID {$giveawayId}. " .
+                            "Purchasing {$amount} more exceeds the per-user limit of {$giveaway->ticketsPerUser}."
+                        ],
                     ]);
                 }
 
