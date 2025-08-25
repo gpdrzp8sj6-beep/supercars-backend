@@ -54,7 +54,7 @@ class AuthenticatedSessionController extends Controller
     public function me(): JsonResponse
     {
         $userId = auth()->user()->id;
-        $user = User::findOrFail($userId);
+        $user = User::with(['addresses', 'defaultAddress'])->findOrFail($userId);
         $user->tickets_bought = $user->ticketsBought();
         return response()->json($user);
     }

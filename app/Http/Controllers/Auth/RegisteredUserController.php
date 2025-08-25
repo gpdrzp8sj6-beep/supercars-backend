@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules;
 use Tymon\JWTAuth\Facades\JWTAuth;
 use Coderflex\LaravelTurnstile\Facades\LaravelTurnstile;
+use App\Models\Address;
 
 class RegisteredUserController extends Controller
 {
@@ -35,11 +36,17 @@ class RegisteredUserController extends Controller
             'surname' => 'required|string|max:255',
             'date_of_birth' => 'required|string|max:255',
             'phone' => 'required|string|max:255|unique:users,phone',
-            'email' => 'required|confirmed|string|email|max:255|unique:users,email',
+            'email' => 'required|string|email|max:255|unique:users,email',
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
             'accept_tos' => ['required', 'boolean', 'accepted'],
             'accept_privacy' => ['required', 'boolean', 'accepted'],
             'captcha' => ['required', 'string'],
+            // Address fields (optional for normal signup; required on checkout UI side)
+            'address_line_1' => 'nullable|string|max:255',
+            'address_line_2' => 'nullable|string|max:255',
+            'city' => 'nullable|string|max:255',
+            'post_code' => 'nullable|string|max:255',
+            'country' => 'nullable|string|max:255',
         ]);
 
         $cfRes = LaravelTurnstile::validate(
@@ -60,6 +67,22 @@ class RegisteredUserController extends Controller
             'email' => $request->email,
             'password' => Hash::make($request->password),
         ]);
+
+        // If address provided, create as a default address entry for the user
+        if ($request->filled('address_line_1') || $request->filled('city') || $request->filled('post_code') || $request->filled('country')) {
+            // Ensure only one default: unset existing defaults (none at this point, but safe)
+            $user->addresses()->update(['is_default' => false]);
+
+            $user->addresses()->create([
+                'address_line_1' => $request->address_line_1,
+                'address_line_2' => $request->address_line_2,
+                'city' => $request->city,
+                'post_code' => $request->post_code,
+                'country' => $request->country,
+                'label' => $request->input('address_label', 'Default'),
+                'is_default' => true,
+            ]);
+        }
 
         event(new Registered($user));
 

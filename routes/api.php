@@ -7,6 +7,7 @@ use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\Giveaways\GiveawaysController;
 use App\Http\Controllers\Orders\OrdersController;
+use App\Http\Controllers\Settings\AddressesController;
 use App\Http\Controllers\Payment\PaymentController;
 use App\Models\SiteSettings;
 use Illuminate\Support\Facades\Route;
@@ -26,6 +27,16 @@ Route::middleware('auth:api')->group(function () {
 
     Route::prefix('payment')->group(function () {
         Route::get('/', [PaymentController::class, 'generateCheckout']);
+    });
+
+    // Addresses management
+    Route::prefix('addresses')->group(function () {
+        Route::get('/', [AddressesController::class, 'index']);
+        Route::post('/', [AddressesController::class, 'store']);
+        Route::put('{address}', [AddressesController::class, 'update']);
+        Route::patch('{address}', [AddressesController::class, 'update']);
+        Route::delete('{address}', [AddressesController::class, 'destroy']);
+        Route::post('{address}/default', [AddressesController::class, 'setDefault']);
     });
 });
 
