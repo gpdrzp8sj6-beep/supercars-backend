@@ -48,7 +48,7 @@ class RegisteredUserController extends Controller
                 'password' => ['required', 'confirmed', Rules\Password::defaults()],
                 'accept_tos' => ['required', 'boolean', 'accepted'],
                 'accept_privacy' => ['required', 'boolean', 'accepted'],
-                'captcha' => ['required', 'string'],
+                'captcha' => config('turnstile.turnstile_secret_key') ? ['required', 'string'] : ['nullable', 'string'],
                 // Address fields (optional for normal signup; required on checkout UI side)
                 'address_line_1' => 'nullable|string|max:255',
                 'address_line_2' => 'nullable|string|max:255',
@@ -57,19 +57,22 @@ class RegisteredUserController extends Controller
                 'country' => 'nullable|string|max:255',
             ]);
 
-            $cfRes = LaravelTurnstile::validate(
-                $request->get('captcha')
-            );
+            // Skip captcha validation if secret key not set (for testing)
+            if (config('turnstile.turnstile_secret_key') && $request->get('captcha')) {
+                $cfRes = LaravelTurnstile::validate(
+                    $request->get('captcha')
+                );
 
-            if (! $cfRes['success']) {
-                Log::warning('Registration failed CAPTCHA', [
-                    'ip' => $request->ip(),
-                    'email' => $request->input('email'),
-                    'phone' => $request->input('phone'),
-                ]);
-                return response()->json([
-                    'message' => 'The CAPTCHA thinks you are a robot! Please refresh and try again.'
-                ], 401);
+                if (! $cfRes['success']) {
+                    Log::warning('Registration failed CAPTCHA', [
+                        'ip' => $request->ip(),
+                        'email' => $request->input('email'),
+                        'phone' => $request->input('phone'),
+                    ]);
+                    return response()->json([
+                        'message' => 'The CAPTCHA thinks you are a robot! Please refresh and try again.'
+                    ], 401);
+                }
             }
 
             $user = User::create([
