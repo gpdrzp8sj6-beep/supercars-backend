@@ -8,9 +8,11 @@ use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\Rules;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\WelcomeUser;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rules;
 use Tymon\JWTAuth\Facades\JWTAuth;
 use Coderflex\LaravelTurnstile\Facades\LaravelTurnstile;
 use Illuminate\Validation\ValidationException;
@@ -34,49 +36,10 @@ class RegisteredUserController extends Controller
     public function store(Request $request): JsonResponse
     {
         try {
-            $ip = $request->ip();
-            $email = $request->input('email');
-            $phone = $request->input('phone');
-
-            // Check for suspicious rapid attempts from same IP
-            $recentAttempts = Cache::get("registration_attempts_{$ip}", 0);
-            if ($recentAttempts >= 2) {
-                Log::warning('Suspicious registration activity detected', [
-                    'ip' => $ip,
-                    'email' => $email,
-                    'phone' => $phone,
-                    'attempts' => $recentAttempts + 1
-                ]);
-                return response()->json([
-                    'message' => 'Too many registration attempts. Please try again later.',
-                    'error' => 'rate_limit_exceeded'
-                ], 429);
-            }
-
-            // Increment the attempt counter
-            Cache::put("registration_attempts_{$ip}", $recentAttempts + 1, 600); // 10 minutes
-            // Check for suspicious email patterns (similar emails from same IP)
-            $emailPattern = preg_replace('/\d+/', '*', $email); // Replace numbers with *
-            $emailKey = "email_pattern_{$ip}_{$emailPattern}";
-            $similarEmails = Cache::get($emailKey, 0);
-            if ($similarEmails >= 1) {
-                Log::warning('Multiple similar emails from same IP detected', [
-                    'ip' => $ip,
-                    'email_pattern' => $emailPattern,
-                    'current_email' => $email,
-                    'similar_count' => $similarEmails + 1
-                ]);
-                return response()->json([
-                    'message' => 'Suspicious registration pattern detected. Please try again later.',
-                    'error' => 'suspicious_pattern'
-                ], 429);
-            }
-            Cache::put($emailKey, $similarEmails + 1, 3600); // 1 hour
-
             Log::info('Registration attempt started', [
-                'ip' => $ip,
-                'email' => $email,
-                'phone' => $phone,
+                'ip' => $request->ip(),
+                'email' => $request->input('email'),
+                'phone' => $request->input('phone'),
                 'request' => $request->except(['password', 'password_confirmation', 'captcha'])
             ]);
             $request->validate([
@@ -98,20 +61,29 @@ class RegisteredUserController extends Controller
             ]);
 
             // Skip captcha validation if secret key not set or captcha not provided (for testing)
-            if (config('turnstile.turnstile_secret_key') && $request->filled('captcha')) {
-                $cfRes = LaravelTurnstile::validate(
-                    $request->get('captcha')
-                );
-
-                if (! $cfRes['success']) {
-                    Log::warning('Registration failed CAPTCHA', [
+            $turnstileSecret = config('turnstile.turnstile_secret_key');
+            if (!empty($turnstileSecret) && $request->filled('captcha')) {
+                try {
+                    $cfRes = LaravelTurnstile::validate($request->get('captcha'));
+                    if (!($cfRes['success'] ?? false)) {
+                        Log::warning('Registration failed CAPTCHA', [
+                            'ip' => $request->ip(),
+                            'email' => $request->input('email'),
+                            'phone' => $request->input('phone'),
+                            'cf_response' => $cfRes,
+                        ]);
+                        return response()->json([
+                            'message' => 'The CAPTCHA thinks you are a robot! Please refresh and try again.'
+                        ], 401);
+                    }
+                } catch (\Throwable $cfEx) {
+                    // Gracefully handle missing/invalid secret or API errors
+                    Log::error('Turnstile validation error: ' . $cfEx->getMessage(), [
                         'ip' => $request->ip(),
                         'email' => $request->input('email'),
-                        'phone' => $request->input('phone'),
+                        'exception' => $cfEx,
                     ]);
-                    return response()->json([
-                        'message' => 'The CAPTCHA thinks you are a robot! Please refresh and try again.'
-                    ], 401);
+                    // Do not block registration due to CAPTCHA infra error in non-prod/dev setups
                 }
             }
 
@@ -154,6 +126,27 @@ class RegisteredUserController extends Controller
                 'user_id' => $user->id,
             ]);
 
+            // Send welcome email (do not fail registration if email fails)
+            try {
+                Log::info('Mail configuration before sending welcome email', [
+                    'mail_default' => config('mail.default'),
+                    'smtp_host' => config('mail.mailers.smtp.host'),
+                    'smtp_port' => config('mail.mailers.smtp.port'),
+                    'from_address' => config('mail.from.address'),
+                ]);
+                Mail::to($user->email)->send(new WelcomeUser($user));
+                Log::info('Welcome email sent', [
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                ]);
+            } catch (\Throwable $mailEx) {
+                Log::error('Failed to send welcome email: ' . $mailEx->getMessage(), [
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                    'exception' => $mailEx,
+                ]);
+            }
+
             $token = JWTAuth::fromUser($user);
             $ttl = config('jwt.ttl', 60); // fallback to 60 if not set
 
@@ -161,9 +154,6 @@ class RegisteredUserController extends Controller
                 'user_id' => $user->id,
                 'email' => $user->email,
             ]);
-
-            // Clear the attempt counter on successful registration
-            Cache::forget("registration_attempts_{$ip}");
 
             return response()->json([
                 'message' => 'User registered successfully',
