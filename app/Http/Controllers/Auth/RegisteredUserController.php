@@ -36,7 +36,6 @@ class RegisteredUserController extends Controller
     public function store(Request $request): JsonResponse
     {
         try {
-
             $ip = $request->ip();
             $email = $request->input('email');
             $phone = $request->input('phone');
@@ -76,12 +75,6 @@ class RegisteredUserController extends Controller
             }
             Cache::put($emailKey, $similarEmails + 1, 3600); // 1 hour
 
-            Log::info('Registration attempt started', [
-                'ip' => $request->ip(),
-                'email' => $request->input('email'),
-                'phone' => $request->input('phone'),
-                'request' => $request->except(['password', 'password_confirmation', 'captcha'])
-            ]);
             $request->validate([
                 'forenames' => 'required|string|max:255',
                 'surname' => 'required|string|max:255',
@@ -107,10 +100,9 @@ class RegisteredUserController extends Controller
                     $cfRes = LaravelTurnstile::validate($request->get('captcha'));
                     if (!($cfRes['success'] ?? false)) {
                         Log::warning('Registration failed CAPTCHA', [
-                            'ip' => $request->ip(),
-                            'email' => $request->input('email'),
-                            'phone' => $request->input('phone'),
-                            'cf_response' => $cfRes,
+                            'ip' => $ip,
+                            'email' => $email,
+                            'phone' => $phone,
                         ]);
                         return response()->json([
                             'message' => 'The CAPTCHA thinks you are a robot! Please refresh and try again.'
@@ -119,8 +111,8 @@ class RegisteredUserController extends Controller
                 } catch (\Throwable $cfEx) {
                     // Gracefully handle missing/invalid secret or API errors
                     Log::error('Turnstile validation error: ' . $cfEx->getMessage(), [
-                        'ip' => $request->ip(),
-                        'email' => $request->input('email'),
+                        'ip' => $ip,
+                        'email' => $email,
                         'exception' => $cfEx,
                     ]);
                     // Do not block registration due to CAPTCHA infra error in non-prod/dev setups
@@ -134,11 +126,6 @@ class RegisteredUserController extends Controller
                 'phone' => $request->phone,
                 'email' => $request->email,
                 'password' => Hash::make($request->password),
-            ]);
-            Log::info('User created during registration', [
-                'user_id' => $user->id,
-                'email' => $user->email,
-                'phone' => $user->phone,
             ]);
 
             // If address provided, create as a default address entry for the user
@@ -155,30 +142,13 @@ class RegisteredUserController extends Controller
                     'label' => $request->input('address_label', 'Default'),
                     'is_default' => true,
                 ]);
-                Log::info('Address created during registration', [
-                    'user_id' => $user->id,
-                    'address_id' => $address->id,
-                ]);
             }
 
             event(new Registered($user));
-            Log::info('Registration event fired', [
-                'user_id' => $user->id,
-            ]);
 
             // Send welcome email (do not fail registration if email fails)
             try {
-                Log::info('Mail configuration before sending welcome email', [
-                    'mail_default' => config('mail.default'),
-                    'smtp_host' => config('mail.mailers.smtp.host'),
-                    'smtp_port' => config('mail.mailers.smtp.port'),
-                    'from_address' => config('mail.from.address'),
-                ]);
                 Mail::to($user->email)->send(new WelcomeUser($user));
-                Log::info('Welcome email sent', [
-                    'user_id' => $user->id,
-                    'email' => $user->email,
-                ]);
             } catch (\Throwable $mailEx) {
                 Log::error('Failed to send welcome email: ' . $mailEx->getMessage(), [
                     'user_id' => $user->id,
@@ -190,10 +160,8 @@ class RegisteredUserController extends Controller
             $token = JWTAuth::fromUser($user);
             $ttl = config('jwt.ttl', 60); // fallback to 60 if not set
 
-            Log::info('Registration successful', [
-                'user_id' => $user->id,
-                'email' => $user->email,
-            ]);
+            // Clear the attempt counter on successful registration
+            Cache::forget("registration_attempts_{$ip}");
 
             return response()->json([
                 'message' => 'User registered successfully',
