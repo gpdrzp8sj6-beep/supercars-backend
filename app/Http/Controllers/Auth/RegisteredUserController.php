@@ -2,20 +2,21 @@
 
 namespace App\Http\Controllers\Auth;
 
-use App\Http\Controllers\Controller;
 use App\Models\User;
-use Illuminate\Auth\Events\Registered;
-use Illuminate\Http\Request;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Mail;
+use App\Mail\OtpMail;
 use App\Mail\WelcomeUser;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Http\Request;
 use Illuminate\Validation\Rules;
+use Illuminate\Http\JsonResponse;
 use Tymon\JWTAuth\Facades\JWTAuth;
-use Coderflex\LaravelTurnstile\Facades\LaravelTurnstile;
+use Illuminate\Support\Facades\Log;
+use App\Http\Controllers\Controller;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Auth\Events\Registered;
 use Illuminate\Validation\ValidationException;
+use Coderflex\LaravelTurnstile\Facades\LaravelTurnstile;
 
 class RegisteredUserController extends Controller
 {
@@ -160,11 +161,25 @@ class RegisteredUserController extends Controller
             $token = JWTAuth::fromUser($user);
             $ttl = config('jwt.ttl', 60); // fallback to 60 if not set
 
+            // Generate OTP for email verification
+            $otp = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+            $user->otp_code = $otp;
+            $user->otp_expires_at = now()->addMinutes(10);
+            $user->save();
+
+            // Send OTP email
+            Mail::to($user->email)->send(new OtpMail($otp));
+
+            Log::info('User registered and OTP sent', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+            ]);
+
             // Clear the attempt counter on successful registration
             Cache::forget("registration_attempts_{$ip}");
 
             return response()->json([
-                'message' => 'User registered successfully',
+                'message' => 'User registered successfully. Please check your email for OTP to verify your account.',
                 'user' => $user,
                 'access_token' => $token,
                 'token_type' => 'bearer',

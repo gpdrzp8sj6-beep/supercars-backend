@@ -8,21 +8,23 @@ use App\Http\Controllers\Auth\EmailVerificationNotificationController;
 use App\Http\Controllers\Settings\PasswordController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 use App\Http\Controllers\Auth\LogoutController;
+use App\Http\Controllers\Auth\OtpVerificationController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function () {
-    Route::middleware('guest:api')->group(function () {
-        Route::post('register', [RegisteredUserController::class, 'store']);
-        Route::post('login', [AuthenticatedSessionController::class, 'store']);
+Route::middleware('guest:api')->group(function () {
+    Route::post('register', [RegisteredUserController::class, 'store']);
+});
 
-        Route::post('forgot-password', [PasswordResetLinkController::class, 'store']);
-        Route::post('reset-password', [NewPasswordController::class, 'reset']);
-    });
-
-    Route::middleware('auth:api')->group(function () {
+Route::post('login', [AuthenticatedSessionController::class, 'store']);    Route::middleware('auth:api')->group(function () {
         Route::post('logout', [AuthenticatedSessionController::class, 'destroy']);
         Route::post('me', [AuthenticatedSessionController::class, 'me']);
-        Route::post('update', [PasswordController::class, 'update']);
+        Route::post('update', [PasswordController::class, 'update'])->middleware('verified');
+
+        // OTP verification routes (accessible to authenticated but unverified users)
+        Route::post('verify-otp', [OtpVerificationController::class, 'verify']);
+        Route::post('ensure-otp', [OtpVerificationController::class, 'ensureOtp']);
+        Route::post('resend-otp', [OtpVerificationController::class, 'resend']);
 
         Route::get('email/verify/{id}/{hash}', [VerifyEmailController::class, 'verify'])
             ->middleware(['signed', 'throttle:6,1'])

@@ -26,12 +26,27 @@ class AuthenticatedSessionController extends Controller
             return response()->json(['error' => 'Could not create token'], 500);
         }
 
+        $user = auth()->user();
+
+        if (!$user->email_verified_at) {
+            return response()->json([
+                'error' => 'Account not verified',
+                'message' => 'Please verify your email address to continue.',
+                'requires_verification' => true,
+                'user_id' => $user->id,
+                'redirect_to' => '/auth/verify',
+                'access_token' => $token,
+                'token_type' => 'bearer',
+                'expires_in' => auth('api')->factory()->getTTL() * 60,
+            ], 403);
+        }
+
         // Return JWT token in response
         return response()->json([
             'access_token' => $token,
             'token_type' => 'bearer',
             'expires_in' => auth('api')->factory()->getTTL() * 60,
-            'user' => auth()->user(),
+            'user' => $user,
         ]);
     }
 

@@ -2,13 +2,14 @@
 
 namespace App\Http\Requests\Auth;
 
-use Illuminate\Auth\Events\Lockout;
-use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\RateLimiter;
-use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 use App\Models\User;
+use Illuminate\Support\Str;
+use Tymon\JWTAuth\Facades\JWTAuth;
+use Illuminate\Auth\Events\Lockout;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Validation\ValidationException;
 
 class LoginRequest extends FormRequest
 {
@@ -49,7 +50,7 @@ class LoginRequest extends FormRequest
 
         // Generate JWT token (using tymon/jwt-auth)
         // Make sure to add "use Tymon\JWTAuth\Facades\JWTAuth;" at the top if you use this
-        $token = \Tymon\JWTAuth\Facades\JWTAuth::fromUser($user);
+        $token = JWTAuth::fromUser($user);
 
         return $token;
     }

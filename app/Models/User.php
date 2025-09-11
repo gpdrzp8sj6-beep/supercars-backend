@@ -26,6 +26,8 @@ class User extends Authenticatable implements JWTSubject
         'phone',
         'email',
         'password',
+        'otp_code',
+        'otp_expires_at',
     ];
 
     /**
@@ -51,6 +53,7 @@ class User extends Authenticatable implements JWTSubject
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'otp_expires_at' => 'datetime',
         ];
     }
 
