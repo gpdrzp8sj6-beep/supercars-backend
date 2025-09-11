@@ -5,6 +5,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
+use App\Mail\OrderCompleted;
 
 class Order extends Model
 {
@@ -30,6 +33,51 @@ class Order extends Model
             ];
     }
 
+    protected static function booted(): void
+    {
+        // On create: if status already completed, send email
+        static::created(function (Order $order) {
+            if (($order->status ?? null) === 'completed') {
+                try {
+                    $email = $order->user?->email;
+                    if ($email) {
+                        Mail::to($email)->send(new OrderCompleted($order));
+                        Log::info('Order completed email sent (on create).', ['order_id' => $order->id]);
+                    } else {
+                        Log::warning('Order completed (on create) but user email missing.', ['order_id' => $order->id]);
+                    }
+                } catch (\Throwable $ex) {
+                    Log::error('Failed to send order completed email (on create): ' . $ex->getMessage(), [
+                        'order_id' => $order->id,
+                        'exception' => $ex,
+                    ]);
+                }
+            }
+        });
+
+        // On update: when status transitions to completed, send email
+        static::updated(function (Order $order) {
+            if ($order->wasChanged('status')) {
+                $original = $order->getOriginal('status');
+                if ($original !== 'completed' && $order->status === 'completed') {
+                    try {
+                        $email = $order->user?->email;
+                        if ($email) {
+                            Mail::to($email)->send(new OrderCompleted($order));
+                            Log::info('Order completed email sent (on status update).', ['order_id' => $order->id]);
+                        } else {
+                            Log::warning('Order status updated to completed but user email missing.', ['order_id' => $order->id]);
+                        }
+                    } catch (\Throwable $ex) {
+                        Log::error('Failed to send order completed email (on update): ' . $ex->getMessage(), [
+                            'order_id' => $order->id,
+                            'exception' => $ex,
+                        ]);
+                    }
+                }
+            }
+        });
+    }
 
     public function giveaways(): BelongsToMany
     {

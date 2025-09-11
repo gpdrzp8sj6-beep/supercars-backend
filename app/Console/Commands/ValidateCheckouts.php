@@ -5,6 +5,9 @@ namespace App\Console\Commands;
 use Illuminate\Console\Command;
 use App\Models\Order;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
+use App\Mail\OrderCompleted;
 
 class ValidateCheckouts extends Command
 {
@@ -19,6 +22,16 @@ class ValidateCheckouts extends Command
                 if ($order->status !== 'completed') {
                     $order->update(['status' => 'completed']);
                     $this->info("Order {$order->id} marked as completed (zero-amount).");
+                    // Send completion email for zero-amount orders
+                    try {
+                        Mail::to($order->user->email)->send(new OrderCompleted($order));
+                        Log::info('Order completed email sent (zero-amount).', ['order_id' => $order->id]);
+                    } catch (\Throwable $mailEx) {
+                        Log::error('Failed to send order completed email: ' . $mailEx->getMessage(), [
+                            'order_id' => $order->id,
+                            'exception' => $mailEx,
+                        ]);
+                    }
                 }
                 return;
             }
@@ -62,6 +75,18 @@ class ValidateCheckouts extends Command
             $status = $this->determineStatus($code);
             $order->update(['status' => $status]);
             $this->info("Order {$order->id} updated to {$status}.");
+
+            if ($status === 'completed') {
+                try {
+                    Mail::to($order->user->email)->send(new OrderCompleted($order));
+                    Log::info('Order completed email sent.', ['order_id' => $order->id]);
+                } catch (\Throwable $mailEx) {
+                    Log::error('Failed to send order completed email: ' . $mailEx->getMessage(), [
+                        'order_id' => $order->id,
+                        'exception' => $mailEx,
+                    ]);
+                }
+            }
         });
     }
 

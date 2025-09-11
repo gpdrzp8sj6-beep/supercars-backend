@@ -9,6 +9,9 @@ use App\Models\Giveaway;
 use App\Models\Order;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
+use App\Mail\OrderCompleted;
 use Illuminate\Validation\ValidationException;
 
 class OrdersController extends Controller
@@ -196,6 +199,31 @@ class OrdersController extends Controller
 
             $order->giveaways()->attach($attachData);
         });
+
+        // Safety: ensure order was created
+        if (!$order) {
+            Log::error('Order creation failed: $order is null after transaction.');
+            return response()->json([
+                'message' => 'Failed to create order',
+            ], 500);
+        }
+
+        // If order is completed immediately (e.g., zero-amount orders), send confirmation email
+        if ($order->status === 'completed') {
+            try {
+                Log::info('Sending order completed email (immediate completion).', [
+                    'order_id' => $order->id,
+                    'user_id' => $order->user_id,
+                ]);
+                Mail::to($request->user()->email)->send(new OrderCompleted($order));
+            } catch (\Throwable $mailEx) {
+                Log::error('Failed to send order completed email: ' . $mailEx->getMessage(), [
+                    'order_id' => $order->id,
+                    'user_id' => $order->user_id,
+                    'exception' => $mailEx,
+                ]);
+            }
+        }
 
         return response()->json([
             'message' => 'Order created successfully',
