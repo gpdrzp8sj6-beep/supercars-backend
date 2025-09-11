@@ -36,6 +36,46 @@ class RegisteredUserController extends Controller
     public function store(Request $request): JsonResponse
     {
         try {
+
+            $ip = $request->ip();
+            $email = $request->input('email');
+            $phone = $request->input('phone');
+
+            // Check for suspicious rapid attempts from same IP
+            $recentAttempts = Cache::get("registration_attempts_{$ip}", 0);
+            if ($recentAttempts >= 2) {
+                Log::warning('Suspicious registration activity detected', [
+                    'ip' => $ip,
+                    'email' => $email,
+                    'phone' => $phone,
+                    'attempts' => $recentAttempts + 1
+                ]);
+                return response()->json([
+                    'message' => 'Too many registration attempts. Please try again later.',
+                    'error' => 'rate_limit_exceeded'
+                ], 429);
+            }
+
+            // Increment the attempt counter
+            Cache::put("registration_attempts_{$ip}", $recentAttempts + 1, 600); // 10 minutes
+            // Check for suspicious email patterns (similar emails from same IP)
+            $emailPattern = preg_replace('/\d+/', '*', $email); // Replace numbers with *
+            $emailKey = "email_pattern_{$ip}_{$emailPattern}";
+            $similarEmails = Cache::get($emailKey, 0);
+            if ($similarEmails >= 1) {
+                Log::warning('Multiple similar emails from same IP detected', [
+                    'ip' => $ip,
+                    'email_pattern' => $emailPattern,
+                    'current_email' => $email,
+                    'similar_count' => $similarEmails + 1
+                ]);
+                return response()->json([
+                    'message' => 'Suspicious registration pattern detected. Please try again later.',
+                    'error' => 'suspicious_pattern'
+                ], 429);
+            }
+            Cache::put($emailKey, $similarEmails + 1, 3600); // 1 hour
+
             Log::info('Registration attempt started', [
                 'ip' => $request->ip(),
                 'email' => $request->input('email'),
