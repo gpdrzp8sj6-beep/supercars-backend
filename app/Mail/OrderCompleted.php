@@ -15,14 +15,14 @@ class OrderCompleted extends Mailable
 
     public function __construct(Order $order)
     {
-        $this->order = $order->fresh(['user']);
+        $this->order = $order->fresh(['user', 'giveaways']);
     }
 
     public function build()
     {
         return $this
             ->subject('Your order is complete')
-            ->markdown('emails.order_completed')
+            ->view('emails.order_completed_simple')
             ->with([
                 'order' => $this->order,
                 'user' => $this->order->user,

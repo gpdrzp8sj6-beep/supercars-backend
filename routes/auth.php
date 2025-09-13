@@ -8,12 +8,17 @@ use App\Http\Controllers\Auth\EmailVerificationNotificationController;
 use App\Http\Controllers\Settings\PasswordController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 use App\Http\Controllers\Auth\LogoutController;
+use App\Http\Controllers\Auth\PasswordResetOtpController;
 use App\Http\Controllers\Auth\OtpVerificationController;
-use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function () {
 Route::middleware('guest:api')->group(function () {
     Route::post('register', [RegisteredUserController::class, 'store']);
+    
+    // Password reset with OTP routes
+    Route::post('forgot-password/send-otp', [PasswordResetOtpController::class, 'sendOtp']);
+    Route::post('forgot-password/verify-otp', [PasswordResetOtpController::class, 'verifyOtp']);
+    Route::post('forgot-password/reset', [PasswordResetOtpController::class, 'resetPassword']);
 });
 
 Route::post('login', [AuthenticatedSessionController::class, 'store']);    Route::middleware('auth:api')->group(function () {

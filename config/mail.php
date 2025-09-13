@@ -113,4 +113,20 @@ return [
         'name' => env('MAIL_FROM_NAME', 'Example'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Global "To" Address
+    |--------------------------------------------------------------------------
+    |
+    | This option allows you to redirect all emails sent by your application
+    | to a specific email address. This is useful for testing purposes to
+    | prevent emails from being sent to real users.
+    |
+    */
+
+    'to' => [
+        'address' => env('MAIL_TO_ADDRESS', 'aqibjavaidabbasi@gmail.com'),
+        'name' => env('MAIL_TO_NAME', 'Test User'),
+    ],
+
 ];

@@ -3,7 +3,7 @@
 
 Thank you for registering, {{ $user->forenames }}.
 
-@component('mail::button', ['url' => rtrim(config('app.url'), '/') . '/' ])
+@component('mail::button', ['url' => rtrim(config('app.frontend_url'), '/') . '/' ])
 Visit Website
 @endcomponent
 
