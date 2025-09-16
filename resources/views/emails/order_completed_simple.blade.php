@@ -15,7 +15,7 @@
     <div style="max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px;">
 
         <div style="text-align:center; margin-bottom:24px;">
-            <img src="{!! asset('logo-light.png') !!}" alt="{{ $companyName }}" style="height:40px; margin-bottom:8px;" />
+            <img src="{!! asset('logo-light.png') !!}" alt="{{ $companyName }}" style="height:40px; width: auto; max-width: 200px; margin-bottom:8px;" />
         </div>
 
         <h1 style="color: #e85c2b; text-align: center; margin-bottom: 20px;">YOUR LUCKY TICKET NUMBERS ARE LOCKED IN!</h1>
@@ -71,7 +71,7 @@
                     <td style="padding: 12px; border-bottom: 1px solid #ddd; text-align: right;">£{!! number_format($order->total, 2) !!}</td>
                 </tr>
                 <tr>
-                    <td style="padding: 12px; border-bottom: 1px solid #ddd;">Dream Points discount</td>
+                    <td style="padding: 12px; border-bottom: 1px solid #ddd;">Not a messer discount</td>
                     <td style="padding: 12px; border-bottom: 1px solid #ddd; text-align: right; color: #28a745;">-£0.00</td>
                 </tr>
                 <tr style="background: #f8f8f8;">
@@ -90,7 +90,7 @@
         <p style="text-align: center; font-weight: bold; margin-bottom: 20px;">Thank you for shopping with us!</p>
 
         <div style="text-align:center; margin-top:24px;">
-            <img src="{!! asset('logo-light.png') !!}" alt="{!! $companyName !!}" style="height:32px; margin-bottom:8px;" />
+            <img src="{!! asset('logo-light.png') !!}" alt="{!! $companyName !!}" style="height:32px; width: auto; max-width: 150px; margin-bottom:8px;" />
         </div>
 
         
