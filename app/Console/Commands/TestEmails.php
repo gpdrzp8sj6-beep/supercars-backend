@@ -18,7 +18,7 @@ class TestEmails extends Command
      *
      * @var string
      */
-    protected $signature = 'test:emails {email?} {--type=all : Type of email to test (all, order, otp, password-reset, welcome)}';
+    protected $signature = 'test:emails {email} {--type=all : Type of email to test (all, order, otp, password-reset, welcome)}';
 
     /**
      * The console command description.
@@ -32,11 +32,12 @@ class TestEmails extends Command
      */
     public function handle()
     {
-        $email = $this->argument('email') ?? 'Kysmithz774@gmail.com';
+        $email = $this->argument('email');
         $type = $this->option('type');
 
         $this->info("🚀 Testing emails - sending to: {$email}");
         $this->info("📧 Email type: {$type}");
+        $this->info("🔍 Debug: Email argument received: '{$email}'");
         $this->newLine();
 
         $sentCount = 0;

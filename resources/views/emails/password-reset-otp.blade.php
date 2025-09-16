@@ -7,14 +7,14 @@ We received a request to reset your password for your Supercars account. If you 
 ## Your Password Reset Code
 
 @component('mail::panel')
-# {{ $otp }}
+# {!! $otp !!}
 @endcomponent
 
-**Important:** This code will expire in **{{ $expiresIn }} minutes** for security reasons. Please use it promptly to reset your password.
+**Important:** This code will expire in **{!! $expiresIn !!} minutes** for security reasons. Please use it promptly to reset your password.
 
 If you didn't request a password reset, no changes will be made to your account.
 
 Thanks,<br>
-{{ config('app.name') }} Team
+{!! config('app.name') !!} Team
 
 @endcomponent

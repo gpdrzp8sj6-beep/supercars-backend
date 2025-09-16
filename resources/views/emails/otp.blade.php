@@ -7,12 +7,12 @@ Your account has been created successfully. To complete your registration please
 ## Your Verification Code
 
 @component('mail::panel')
-# {{ $otp }}
+# {!! $otp !!}
 @endcomponent
 
-**Important:** This code will expire in **{{ $expiresIn }} minutes** for security reasons. Please use it promptly to complete your account verification.
+**Important:** This code will expire in **{!! $expiresIn !!} minutes** for security reasons. Please use it promptly to complete your account verification.
 
 Thanks for joining us!<br>
-{{ config('app.name') }} Team
+{!! config('app.name') !!} Team
 
 @endcomponent

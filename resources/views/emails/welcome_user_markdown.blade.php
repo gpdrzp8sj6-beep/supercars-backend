@@ -1,7 +1,7 @@
 @component('mail::message')
 # Hello!
 
-Thank you for registering, {{ $user->forenames }}.
+Thank you for registering, {!! $user->forenames !!}.
 
 @component('mail::button', ['url' => rtrim(config('app.frontend_url'), '/') . '/' ])
 Visit Website
@@ -10,5 +10,5 @@ Visit Website
 Thank you for using our app!
 
 Regards,
-{{ config('app.name') }}
+{!! config('app.name') !!}
 @endcomponent

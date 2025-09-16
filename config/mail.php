@@ -124,9 +124,9 @@ return [
     |
     */
 
-    'to' => [
-        'address' => env('MAIL_TO_ADDRESS', 'aqibjavaidabbasi@gmail.com'),
-        'name' => env('MAIL_TO_NAME', 'Test User'),
-    ],
+    // 'to' => [
+    //     'address' => env('MAIL_TO_ADDRESS', 'aqibjavaidabbasi@gmail.com'),
+    //     'name' => env('MAIL_TO_NAME', 'Test User'),
+    // ],
 
 ];

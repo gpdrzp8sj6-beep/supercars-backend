@@ -1,27 +1,33 @@
+ <!-- Legal Footer -->
+        @php
+        $companyName = config('app.name');
+        $email = config('mail.from.address');
+        $websiteUrl = config('app.frontend_url');
+        @endphp
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Order Confirmation - Dream Car Giveaways</title>
+    <title>Order Confirmation - {{ $companyName }}</title>
 </head>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; background-color: #f4f4f4;">
     <div style="max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px;">
 
         <div style="text-align:center; margin-bottom:24px;">
-            <img src="{{ asset('logo.svg') }}" alt="Dream Car Giveaways" style="height:40px; margin-bottom:8px;" />
+            <img src="{!! asset('logo.svg') !!}" alt="{{ $companyName }}" style="height:40px; margin-bottom:8px;" />
         </div>
 
         <h1 style="color: #e85c2b; text-align: center; margin-bottom: 20px;">YOUR LUCKY TICKET NUMBERS ARE LOCKED IN!</h1>
 
         <p style="font-size: 16px; margin-bottom: 20px;">
-            Hi {{ $user->forenames }} {{ $user->surname }}, Thank you for your entry, you can find a full breakdown of your order below. Make sure you're following us on socials to stay up to date with the live draw; you could be the next big winner!
+            Hi {!! $user->forenames !!} {!! $user->surname !!}, Thank you for your entry, you can find a full breakdown of your order below. Make sure you're following us on socials to stay up to date with the live draw; you could be the next big winner!
         </p>
 
         <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
 
-        <p><strong>Order number:</strong> <span style="color:#e85c2b; font-weight:bold;">#{{ $order->id }}</span><br>
-        <strong>Ordered on:</strong> {{ $order->created_at->format('j M Y \a\t H:i') }}</p>
+        <p><strong>Order number:</strong> <span style="color:#e85c2b; font-weight:bold;">#{!! $order->id !!}</span><br>
+        <strong>Ordered on:</strong> {!! $order->created_at->format('j M Y \a\t H:i') !!}</p>
 
         <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
 
@@ -36,21 +42,21 @@
         @if($giveaway)
         <div style="border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin: 10px 0; background: #f9f9f9;">
             <div style="display: flex; align-items: center; gap: 15px;">
-                <img src="{{ asset('logo.svg') }}"
+                <img src="{!! asset('logo.svg') !!}"
                      alt="Giveaway Car"
                      style="width: 100px; height: 70px; object-fit: cover; border-radius: 6px;" />
                 <div>
-                    <strong style="color: #333;">{{ $giveaway->title }}</strong><br>
-                    <span style="color: #666; font-size: 14px;">{{ $giveaway->description ?? '' }}</span><br>
-                    <span style="color: #e85c2b; font-weight: bold;">£{{ number_format($giveaway->price, 2) }}</span>
+                    <strong style="color: #333;">{!! $giveaway->title !!}</strong><br>
+                    <span style="color: #666; font-size: 14px;">{!! $giveaway->description ?? '' !!}</span><br>
+                    <span style="color: #e85c2b; font-weight: bold;">£{!! number_format($giveaway->price, 2) !!}</span>
                 </div>
             </div>
         </div>
         @endif
 
-        <p><strong>Quantity:</strong> {{ $quantity }}<br>
-        <strong>Draw numbers:</strong> {{ implode(', ', $numbers) }}<br>
-        <strong>Draw date:</strong> {{ $giveaway ? $giveaway->closes_at->format('l j F Y \a\t H:i') : 'TBD' }}</p>
+        <p><strong>Quantity:</strong> {!! $quantity !!}<br>
+        <strong>Draw numbers:</strong> {!! implode(', ', $numbers) !!}<br>
+        <strong>Draw date:</strong> {!! $giveaway ? $giveaway->closes_at->format('l j F Y \a\t H:i') : 'TBD' !!}</p>
 
         <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
 
@@ -60,7 +66,7 @@
             <table style="width: 100%; border-collapse: collapse;">
                 <tr style="background: #f8f8f8;">
                     <td style="padding: 12px; border-bottom: 1px solid #ddd; font-weight: bold;">Subtotal</td>
-                    <td style="padding: 12px; border-bottom: 1px solid #ddd; text-align: right;">£{{ number_format($order->total, 2) }}</td>
+                    <td style="padding: 12px; border-bottom: 1px solid #ddd; text-align: right;">£{!! number_format($order->total, 2) !!}</td>
                 </tr>
                 <tr>
                     <td style="padding: 12px; border-bottom: 1px solid #ddd;">Dream Points discount</td>
@@ -72,7 +78,7 @@
                 </tr>
                 <tr style="background: #e85c2b; color: white;">
                     <td style="padding: 12px; font-weight: bold;">Order Total</td>
-                    <td style="padding: 12px; text-align: right; font-weight: bold;">£{{ number_format($order->total, 2) }}</td>
+                    <td style="padding: 12px; text-align: right; font-weight: bold;">£{!! number_format($order->total, 2) !!}</td>
                 </tr>
             </table>
         </div>
@@ -82,13 +88,13 @@
         <p style="text-align: center; font-weight: bold; margin-bottom: 20px;">Thank you for shopping with us!</p>
 
         <div style="text-align:center; margin-top:24px;">
-            <img src="{{ asset('logo.svg') }}" alt="Dream Car Giveaways" style="height:32px; margin-bottom:8px;" />
+            <img src="{!! asset('logo.svg') !!}" alt="{!! $companyName !!}" style="height:32px; margin-bottom:8px;" />
         </div>
 
+        
         <div style="text-align: center; font-size:12px; color:#888; margin-top: 20px;">
-            © Dream Car Giveaways<br>
-            Registered Company Number: <a href="https://find-and-update.company-information.service.gov.uk/company/11320154" style="color:#e85c2b;">11320154</a> England and Wales<br>
-            <a href="https://dreamcargiveaways.co.uk" style="color:#e85c2b;">dreamcargiveaways.co.uk</a>
+            © {!! $companyName !!}<br>
+            <a href="{!! $websiteUrl !!}" style="color:#e85c2b;">{!! $websiteUrl !!}</a>
         </div>
     </div>
 </body>
