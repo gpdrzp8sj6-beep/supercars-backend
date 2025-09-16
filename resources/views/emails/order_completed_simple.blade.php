@@ -42,9 +42,11 @@
         @if($giveaway)
         <div style="border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin: 10px 0; background: #f9f9f9;">
             <div style="display: flex; align-items: center; gap: 15px;">
-                <img src="{!! asset('logo-light.png') !!}"
+                @if($giveaway->images && is_array($giveaway->images) && !empty($giveaway->images[0]))
+                <img src="{!! asset('storage/' . $giveaway->images[0]) !!}"
                      alt="Giveaway Car"
                      style="width: 100px; height: 70px; object-fit: cover; border-radius: 6px;" />
+                @endif
                 <div>
                     <strong style="color: #333;">{!! $giveaway->title !!}</strong><br>
                     <span style="color: #666; font-size: 14px;">{!! Illuminate\Mail\Markdown::parse($giveaway->description ?? '') !!}</span><br>
