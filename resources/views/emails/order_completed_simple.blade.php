@@ -15,7 +15,7 @@
     <div style="max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px;">
 
         <div style="text-align:center; margin-bottom:24px;">
-            <img src="{!! asset('logo.svg') !!}" alt="{{ $companyName }}" style="height:40px; margin-bottom:8px;" />
+            <img src="{!! asset('logo-light.png') !!}" alt="{{ $companyName }}" style="height:40px; margin-bottom:8px;" />
         </div>
 
         <h1 style="color: #e85c2b; text-align: center; margin-bottom: 20px;">YOUR LUCKY TICKET NUMBERS ARE LOCKED IN!</h1>
@@ -42,12 +42,12 @@
         @if($giveaway)
         <div style="border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin: 10px 0; background: #f9f9f9;">
             <div style="display: flex; align-items: center; gap: 15px;">
-                <img src="{!! asset('logo.svg') !!}"
+                <img src="{!! asset('logo-light.png') !!}"
                      alt="Giveaway Car"
                      style="width: 100px; height: 70px; object-fit: cover; border-radius: 6px;" />
                 <div>
                     <strong style="color: #333;">{!! $giveaway->title !!}</strong><br>
-                    <span style="color: #666; font-size: 14px;">{!! $giveaway->description ?? '' !!}</span><br>
+                    <span style="color: #666; font-size: 14px;">{!! Illuminate\Mail\Markdown::parse($giveaway->description ?? '') !!}</span><br>
                     <span style="color: #e85c2b; font-weight: bold;">£{!! number_format($giveaway->price, 2) !!}</span>
                 </div>
             </div>
@@ -88,7 +88,7 @@
         <p style="text-align: center; font-weight: bold; margin-bottom: 20px;">Thank you for shopping with us!</p>
 
         <div style="text-align:center; margin-top:24px;">
-            <img src="{!! asset('logo.svg') !!}" alt="{!! $companyName !!}" style="height:32px; margin-bottom:8px;" />
+            <img src="{!! asset('logo-light.png') !!}" alt="{!! $companyName !!}" style="height:32px; margin-bottom:8px;" />
         </div>
 
         
