@@ -42,39 +42,39 @@ class RegisteredUserController extends Controller
             $phone = $request->input('phone');
 
             // Check for suspicious rapid attempts from same IP
-            $recentAttempts = Cache::get("registration_attempts_{$ip}", 0);
-            if ($recentAttempts >= 2) {
-                Log::warning('Suspicious registration activity detected', [
-                    'ip' => $ip,
-                    'email' => $email,
-                    'phone' => $phone,
-                    'attempts' => $recentAttempts + 1
-                ]);
-                return response()->json([
-                    'message' => 'Too many registration attempts. Please try again later.',
-                    'error' => 'rate_limit_exceeded'
-                ], 429);
-            }
+            // $recentAttempts = Cache::get("registration_attempts_{$ip}", 0);
+            // if ($recentAttempts >= 2) {
+            //     Log::warning('Suspicious registration activity detected', [
+            //         'ip' => $ip,
+            //         'email' => $email,
+            //         'phone' => $phone,
+            //         'attempts' => $recentAttempts + 1
+            //     ]);
+            //     return response()->json([
+            //         'message' => 'Too many registration attempts. Please try again later.',
+            //         'error' => 'rate_limit_exceeded'
+            //     ], 429);
+            // }
 
-            // Increment the attempt counter
-            Cache::put("registration_attempts_{$ip}", $recentAttempts + 1, 600); // 10 minutes
-            // Check for suspicious email patterns (similar emails from same IP)
-            $emailPattern = preg_replace('/\d+/', '*', $email); // Replace numbers with *
-            $emailKey = "email_pattern_{$ip}_{$emailPattern}";
-            $similarEmails = Cache::get($emailKey, 0);
-            if ($similarEmails >= 1) {
-                Log::warning('Multiple similar emails from same IP detected', [
-                    'ip' => $ip,
-                    'email_pattern' => $emailPattern,
-                    'current_email' => $email,
-                    'similar_count' => $similarEmails + 1
-                ]);
-                return response()->json([
-                    'message' => 'Suspicious registration pattern detected. Please try again later.',
-                    'error' => 'suspicious_pattern'
-                ], 429);
-            }
-            Cache::put($emailKey, $similarEmails + 1, 3600); // 1 hour
+            // // Increment the attempt counter
+            // Cache::put("registration_attempts_{$ip}", $recentAttempts + 1, 600); // 10 minutes
+            // // Check for suspicious email patterns (similar emails from same IP)
+            // $emailPattern = preg_replace('/\d+/', '*', $email); // Replace numbers with *
+            // $emailKey = "email_pattern_{$ip}_{$emailPattern}";
+            // $similarEmails = Cache::get($emailKey, 0);
+            // if ($similarEmails >= 1) {
+            //     Log::warning('Multiple similar emails from same IP detected', [
+            //         'ip' => $ip,
+            //         'email_pattern' => $emailPattern,
+            //         'current_email' => $email,
+            //         'similar_count' => $similarEmails + 1
+            //     ]);
+            //     return response()->json([
+            //         'message' => 'Suspicious registration pattern detected. Please try again later.',
+            //         'error' => 'suspicious_pattern'
+            //     ], 429);
+            // }
+            // Cache::put($emailKey, $similarEmails + 1, 3600); // 1 hour
 
             $request->validate([
                 'forenames' => 'required|string|max:255',
@@ -127,6 +127,7 @@ class RegisteredUserController extends Controller
                 'phone' => $request->phone,
                 'email' => $request->email,
                 'password' => Hash::make($request->password),
+                'email_verified_at' => env('EMAIL_VERIFICATION_ENABLED', true) ? null : now(), // Mark verified if verification disabled
             ]);
 
             // If address provided, create as a default address entry for the user
@@ -161,19 +162,37 @@ class RegisteredUserController extends Controller
             $token = JWTAuth::fromUser($user);
             $ttl = config('jwt.ttl', 60); // fallback to 60 if not set
 
-            // Generate OTP for email verification
-            $otp = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-            $user->otp_code = $otp;
-            $user->otp_expires_at = now()->addMinutes(10);
-            $user->save();
+            // Check if email verification is enabled
+            $emailVerificationEnabled = env('EMAIL_VERIFICATION_ENABLED', true);
 
-            // Send OTP email
-            Mail::to($user->email)->send(new OtpMail($otp));
+            if ($emailVerificationEnabled) {
+                // Generate OTP for email verification
+                $otp = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+                $user->otp_code = $otp;
+                $user->otp_expires_at = now()->addMinutes(10);
+                $user->save();
 
-            Log::info('User registered and OTP sent', [
-                'user_id' => $user->id,
-                'email' => $user->email,
-            ]);
+                // Send OTP email
+                Mail::to($user->email)->send(new OtpMail($otp));
+
+                Log::info('User registered and OTP sent', [
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                ]);
+
+                $message = 'User registered successfully. Please check your email for OTP to verify your account.';
+            } else {
+                // Skip email verification - mark user as verified
+                $user->email_verified_at = now();
+                $user->save();
+
+                Log::info('User registered without email verification', [
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                ]);
+
+                $message = 'User registered successfully. Welcome!';
+            }
 
             // Clear the attempt counter on successful registration
             Cache::forget("registration_attempts_{$ip}");

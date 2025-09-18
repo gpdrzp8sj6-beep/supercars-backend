@@ -15,7 +15,7 @@
     <div style="max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px;">
 
         <div style="text-align:center; margin-bottom:24px;">
-            <img src="{!! asset('logo-light.png') !!}" alt="{{ $companyName }}" style="height:40px; width: auto; max-width: 200px; margin-bottom:8px;" />
+            <img src="{!! asset('logo-light.png') !!}" alt="{{ $companyName }}" style="height:60px; width: auto; max-width: 200px; margin-bottom:8px;" />
         </div>
 
         <h1 style="color: #e85c2b; text-align: center; margin-bottom: 20px;">YOUR LUCKY TICKET NUMBERS ARE LOCKED IN!</h1>
@@ -90,7 +90,7 @@
         <p style="text-align: center; font-weight: bold; margin-bottom: 20px;">Thank you for shopping with us!</p>
 
         <div style="text-align:center; margin-top:24px;">
-            <img src="{!! asset('logo-light.png') !!}" alt="{!! $companyName !!}" style="height:32px; width: auto; max-width: 150px; margin-bottom:8px;" />
+            <img src="{!! asset('logo-light.png') !!}" alt="{!! $companyName !!}" style="height:42px; width: auto; max-width: 150px; margin-bottom:8px;" />
         </div>
 
         
