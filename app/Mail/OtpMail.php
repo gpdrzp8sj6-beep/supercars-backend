@@ -29,7 +29,7 @@ class OtpMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Your Verification Code - Supercars',
+            subject: 'Your Verification Code - ' . config('app.name'),
         );
     }
 

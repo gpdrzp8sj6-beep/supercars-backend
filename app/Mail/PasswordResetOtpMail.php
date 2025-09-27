@@ -29,7 +29,7 @@ class PasswordResetOtpMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Password Reset Code - Supercars',
+            subject: 'Password Reset Code - ' . config('app.name'),
         );
     }
 

@@ -27,7 +27,7 @@ class WelcomeUser extends Mailable
     public function build()
     {
         return $this
-            ->subject('Welcome to Supercars!')
+            ->subject('Welcome to ' . config('app.name') . '!')
             ->markdown('emails.welcome_user_markdown')
             ->with([
                 'user' => $this->user,

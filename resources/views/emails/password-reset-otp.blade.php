@@ -1,8 +1,8 @@
 @component('mail::message')
 
-# Password Reset Request - Supercars
+# Password Reset Request - {{ config('app.name') }}
 
-We received a request to reset your password for your Supercars account. If you didn't make this request, please ignore this email.
+We received a request to reset your password for your {{ config('app.name') }} account. If you didn't make this request, please ignore this email.
 
 ## Your Password Reset Code
 

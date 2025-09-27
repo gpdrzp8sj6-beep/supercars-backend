@@ -1,6 +1,6 @@
 @component('mail::message')
 
-# Welcome to Supercars! 🚗
+# Welcome to {{ config('app.name') }}!
 
 Your account has been created successfully. To complete your registration please verify your email address using the verification code below.
 

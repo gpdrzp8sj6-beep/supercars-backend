@@ -23,7 +23,7 @@ Route::middleware('guest:api')->group(function () {
 
 Route::post('login', [AuthenticatedSessionController::class, 'store']);    Route::middleware('auth:api')->group(function () {
         Route::post('logout', [AuthenticatedSessionController::class, 'destroy']);
-        Route::post('me', [AuthenticatedSessionController::class, 'me']);
+    Route::get('me', [AuthenticatedSessionController::class, 'me']);
         Route::post('update', [PasswordController::class, 'update'])->middleware('verified');
 
         // OTP verification routes (accessible to authenticated but unverified users)
