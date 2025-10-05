@@ -33,32 +33,71 @@
 
         <h2 style="color: #333; margin-bottom: 15px;">Live Draw entries</h2>
 
-        @php
-        $giveaway = $order->giveaways->first();
-        $numbers = $giveaway ? json_decode($giveaway->pivot->numbers ?? '[]', true) : [];
-        $quantity = count($numbers);
-        @endphp
+        @if($order->giveaways && $order->giveaways->count() > 0)
+            @foreach($order->giveaways as $giveaway)
+            @php
+            $numbers = json_decode($giveaway->pivot->numbers ?? '[]', true);
+            $quantity = count($numbers);
+            @endphp
 
-        @if($giveaway)
-        <div style="border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin: 10px 0; background: #f9f9f9;">
-            <div style="display: flex; align-items: center; gap: 15px;">
-                @if($giveaway->images && is_array($giveaway->images) && !empty($giveaway->images[0]))
-                <img src="{!! asset('storage/' . $giveaway->images[0]) !!}"
-                     alt="Giveaway Car"
-                     style="width: 100px; height: 70px; object-fit: cover; border-radius: 6px;" />
-                @endif
-                <div>
-                    <strong style="color: #333;">{!! $giveaway->title !!}</strong><br>
-                    <span style="color: #666; font-size: 14px;">{!! Illuminate\Mail\Markdown::parse($giveaway->description ?? '') !!}</span><br>
-                    <span style="color: #e85c2b; font-weight: bold;">£{!! number_format($giveaway->price, 2) !!}</span>
+            <div style="border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin: 10px 0; background: #f9f9f9;">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    @if($giveaway->images && is_array($giveaway->images) && !empty($giveaway->images[0]))
+                    <img src="{!! asset('storage/' . $giveaway->images[0]) !!}"
+                         alt="Giveaway Car"
+                         style="width: 100px; height: 70px; object-fit: cover; border-radius: 6px;" />
+                    @endif
+                    <div>
+                        <strong style="color: #333;">{!! $giveaway->title !!}</strong><br>
+                        <span style="color: #e85c2b; font-weight: bold;">£{!! number_format($giveaway->price, 2) !!}</span>
+                    </div>
                 </div>
             </div>
-        </div>
-        @endif
 
-        <p><strong>Quantity:</strong> {!! $quantity !!}<br>
-        <strong>Draw numbers:</strong> {!! implode(', ', $numbers) !!}<br>
-        <strong>Draw date:</strong> {!! $giveaway ? $giveaway->closes_at->format('l j F Y \a\t H:i') : 'TBD' !!}</p>
+            <p><strong>Quantity:</strong> {!! $quantity !!}<br>
+            <strong>Draw numbers:</strong> {!! implode(', ', $numbers) !!}<br>
+            <strong>Draw date:</strong> {!! $giveaway->closes_at->format('l j F Y \a\t H:i') !!}</p>
+
+            @endforeach
+        @else
+            <!-- Fallback: Get giveaways from cart data if not attached -->
+            @if($order->cart && is_array($order->cart))
+                @foreach($order->cart as $cartItem)
+                @php
+                $giveaway = \App\Models\Giveaway::find($cartItem['id']);
+                $quantity = $cartItem['amount'];
+                $numbers = $cartItem['numbers'] ?? [];
+                @endphp
+                
+                @if($giveaway)
+                <div style="border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin: 10px 0; background: #f9f9f9;">
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        @if($giveaway->images && is_array($giveaway->images) && !empty($giveaway->images[0]))
+                        <img src="{!! asset('storage/' . $giveaway->images[0]) !!}"
+                             alt="Giveaway Car"
+                             style="width: 100px; height: 70px; object-fit: cover; border-radius: 6px;" />
+                        @endif
+                        <div>
+                            <strong style="color: #333;">{!! $giveaway->title !!}</strong><br>
+                            <span style="color: #e85c2b; font-weight: bold;">£{!! number_format($giveaway->price, 2) !!}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <p><strong>Quantity:</strong> {!! $quantity !!}<br>
+                @if(!empty($numbers))
+                    <strong>Draw numbers:</strong> {!! is_array($numbers) ? implode(', ', $numbers) : $numbers !!}<br>
+                @else
+                    <strong>Draw numbers:</strong> Will be assigned after payment confirmation<br>
+                @endif
+                <strong>Draw date:</strong> {!! $giveaway->closes_at->format('l j F Y \a\t H:i') !!}</p>
+                @endif
+
+                @endforeach
+            @else
+                <p style="color: #999; font-style: italic;">No giveaway details available.</p>
+            @endif
+        @endif
 
         <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
 
@@ -68,18 +107,36 @@
             <table style="width: 100%; border-collapse: collapse;">
                 <tr style="background: #f8f8f8;">
                     <td style="padding: 12px; border-bottom: 1px solid #ddd; font-weight: bold;">Subtotal</td>
-                    <td style="padding: 12px; border-bottom: 1px solid #ddd; text-align: right;">£{!! number_format($order->total, 2) !!}</td>
+                    <td style="padding: 12px; border-bottom: 1px solid #ddd; text-align: right;">£{!! number_format($order->original_total, 2) !!}</td>
                 </tr>
+                @if($order->credit_used > 0)
                 <tr>
-                    <td style="padding: 12px; border-bottom: 1px solid #ddd;">Not a messer discount</td>
-                    <td style="padding: 12px; border-bottom: 1px solid #ddd; text-align: right; color: #28a745;">-£0.00</td>
+                    <td style="padding: 12px; border-bottom: 1px solid #ddd;">Credits Applied</td>
+                    <td style="padding: 12px; border-bottom: 1px solid #ddd; text-align: right; color: #28a745;">-£{!! number_format($order->credit_used, 2) !!}</td>
                 </tr>
+                @endif
                 <tr style="background: #f8f8f8;">
                     <td style="padding: 12px; border-bottom: 1px solid #ddd;">Payment method</td>
-                    <td style="padding: 12px; border-bottom: 1px solid #ddd; text-align: right;">N/A</td>
+                    <td style="padding: 12px; border-bottom: 1px solid #ddd; text-align: right;">
+                        @if($order->total > 0)
+                            @if($order->checkoutId)
+                                Card Payment
+                            @else
+                                Pending Payment
+                            @endif
+                        @else
+                            Credits Only
+                        @endif
+                    </td>
                 </tr>
                 <tr style="background: #e85c2b; color: white;">
-                    <td style="padding: 12px; font-weight: bold;">Order Total</td>
+                    <td style="padding: 12px; font-weight: bold;">
+                        @if($order->total > 0)
+                            Amount Paid
+                        @else
+                            Order Total
+                        @endif
+                    </td>
                     <td style="padding: 12px; text-align: right; font-weight: bold;">£{!! number_format($order->total, 2) !!}</td>
                 </tr>
             </table>

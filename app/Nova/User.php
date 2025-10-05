@@ -2,13 +2,17 @@
 
 namespace App\Nova;
 
-use Illuminate\Http\Request;
-use Laravel\Nova\Auth\PasswordValidationRules;
-use Laravel\Nova\Fields\Gravatar;
 use Laravel\Nova\Fields\ID;
-use Laravel\Nova\Fields\Password;
+use Illuminate\Http\Request;
 use Laravel\Nova\Fields\Text;
+use Laravel\Nova\Fields\HasMany;
+use Laravel\Nova\Fields\Gravatar;
+use Laravel\Nova\Fields\Password;
+use Laravel\Nova\Fields\Number;
 use Laravel\Nova\Http\Requests\NovaRequest;
+use Laravel\Nova\Auth\PasswordValidationRules;
+use App\Nova\CreditTransaction;
+use App\Nova\Actions\AddCreditAction;
 
 class User extends Resource
 {
@@ -85,6 +89,15 @@ class User extends Resource
                 ->onlyOnForms()
                 ->creationRules($this->passwordRules())
                 ->updateRules($this->optionalPasswordRules()),
+
+            Number::make('Credit')
+                ->sortable()
+                ->rules('required', 'numeric', 'min:0')
+                ->step(0.01),
+
+            HasMany::make('Credit', 'creditTransactions', CreditTransaction::class),
+
+            HasMany::make('Addresses'),
         ];
     }
 
@@ -125,6 +138,12 @@ class User extends Resource
      */
     public function actions(NovaRequest $request): array
     {
-        return [];
+        return [
+            (new AddCreditAction())
+                ->showOnTableRow()
+                ->showOnDetail()
+                ->confirmText('Are you sure you want to add credit to this user?')
+                ->confirmButtonText('Add Credit'),
+        ];
     }
 }

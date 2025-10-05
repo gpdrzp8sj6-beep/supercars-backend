@@ -23,14 +23,28 @@ class Order extends Model
           'city',
           'post_code',
           'country',
-          'checkoutId'
+          'checkoutId',
+          'cart',
+          'credit_used',
       ];
 
     protected function casts() {
         return [
                 'total' => 'float',
                 'status' => 'string',
+                'cart' => 'array',
+                'credit_used' => 'decimal:2',
             ];
+    }
+
+    protected $appends = ['original_total'];
+
+    /**
+     * Get the original order total before credit deduction.
+     */
+    public function getOriginalTotalAttribute(): float
+    {
+        return (float) $this->total + (float) $this->credit_used;
     }
 
     protected static function booted(): void

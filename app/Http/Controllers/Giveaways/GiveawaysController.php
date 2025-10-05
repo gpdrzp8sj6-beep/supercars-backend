@@ -8,6 +8,8 @@ use App\Models\Giveaway;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use App\Models\Winner;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class GiveawaysController extends Controller
 {
@@ -66,5 +68,64 @@ class GiveawaysController extends Controller
         }
 
         return response()->json(Giveaway::justLaunched($limit), 200);
+    }
+
+    public function checkTicketAvailability(Request $request, $id): JsonResponse
+    {
+        $request->validate([
+            'numbers' => 'required|array|min:1',
+            'numbers.*' => 'integer|min:1',
+        ]);
+
+        try {
+            $giveaway = Giveaway::findOrFail($id);
+            $requestedNumbers = $request->numbers;
+
+            // Get all assigned numbers for this giveaway (from completed orders)
+            $assignedNumbers = DB::table('giveaway_order')
+                ->join('orders', 'giveaway_order.order_id', '=', 'orders.id')
+                ->where('giveaway_order.giveaway_id', $id)
+                ->where('orders.status', 'completed')
+                ->pluck('giveaway_order.numbers')
+                ->filter()
+                ->flatMap(function ($jsonNumbers) {
+                    return json_decode($jsonNumbers, true) ?: [];
+                })
+                ->unique()
+                ->values();
+
+            $availableNumbers = [];
+            $unavailableNumbers = [];
+            $invalidNumbers = [];
+
+            foreach ($requestedNumbers as $num) {
+                if ($num < 1 || $num > $giveaway->ticketsTotal) {
+                    $invalidNumbers[] = $num;
+                } elseif ($assignedNumbers->contains($num)) {
+                    $unavailableNumbers[] = $num;
+                } else {
+                    $availableNumbers[] = $num;
+                }
+            }
+
+            return response()->json([
+                'available' => $availableNumbers,
+                'unavailable' => $unavailableNumbers,
+                'invalid' => $invalidNumbers,
+                'all_available' => empty($unavailableNumbers) && empty($invalidNumbers),
+                'stats' => [
+                    'total_requested' => count($requestedNumbers),
+                    'available_count' => count($availableNumbers),
+                    'unavailable_count' => count($unavailableNumbers),
+                    'invalid_count' => count($invalidNumbers),
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Failed to check ticket availability',
+                'message' => $e->getMessage()
+            ], 500);
+        }
     }
 }

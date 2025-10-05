@@ -29,6 +29,7 @@ class User extends Authenticatable implements JWTSubject
         'otp_code',
         'otp_expires_at',
         'otp_verified_at',
+        'credit',
     ];
 
     /**
@@ -56,6 +57,7 @@ class User extends Authenticatable implements JWTSubject
             'password' => 'hashed',
             'otp_expires_at' => 'datetime',
             'otp_verified_at' => 'datetime',
+            'credit' => 'decimal:2',
         ];
     }
 
@@ -122,29 +124,27 @@ class User extends Authenticatable implements JWTSubject
             ->values();
     }
 
-    public function ticketsBought()
+    public function ticketsBought(): Collection
     {
-        // Query giveaway_order joined with orders to filter by this user
-        $result = DB::table('giveaway_order')
+        return DB::table('giveaway_order')
             ->join('orders', 'giveaway_order.order_id', '=', 'orders.id')
             ->where('orders.user_id', $this->id)
-            ->select('giveaway_order.giveaway_id', 'giveaway_order.numbers')
+            ->where('orders.status', 'completed')
+            ->select('giveaway_order.giveaway_id', DB::raw('COUNT(*) as bought'), 'giveaway_order.numbers')
+            ->groupBy('giveaway_order.giveaway_id', 'giveaway_order.numbers')
             ->get()
-            ->groupBy('giveaway_id')
-            ->map(function ($items, $giveawayId) {
-                // Sum total tickets bought by counting numbers arrays length
-                $total = $items->reduce(function ($carry, $item) {
-                    $numbers = json_decode($item->numbers, true) ?: [];
-                    return $carry + count($numbers);
-                }, 0);
+            ->map(function ($item) {
                 return [
-                    'id' => (int)$giveawayId,
-                    'bought' => $total,
+                    'id' => $item->giveaway_id,
+                    'giveaway_id' => $item->giveaway_id,
+                    'bought' => (int) $item->bought,
+                    'numbers' => json_decode($item->numbers, true) ?: []
                 ];
-            })
-            ->values()
-            ->toArray();
+            });
+    }
 
-        return $result;
+    public function creditTransactions()
+    {
+        return $this->hasMany(CreditTransaction::class);
     }
 }
