@@ -129,24 +129,25 @@ class Ticket extends Resource
     /**
      * Customize the index query to support searching related models.
      */
-    public static function indexQuery(NovaRequest $request, \Illuminate\Contracts\Database\Eloquent\Builder $query): \Illuminate\Contracts\Database\Eloquent\Builder
+    public static function indexQuery(NovaRequest $request, $query): Builder
     {
         $query = parent::indexQuery($request, $query);
 
         $search = trim((string) $request->get('search'));
         if ($search !== '') {
-            $query->where(function ($q) use ($search) {
+            $searchLower = strtolower($search);
+            $query->where(function ($q) use ($search, $searchLower) {
                 $q->where('id', 'like', "%{$search}%")
-                  ->orWhere('numbers', 'like', "%{$search}%")
+                  ->orWhereRaw('LOWER(numbers) LIKE ?', ["%{$searchLower}%"])
                   ->orWhere('winning_ticket', 'like', "%{$search}%")
-                  ->orWhereHas('giveaway', function ($g) use ($search) {
-                      $g->where('title', 'like', "%{$search}%");
+                  ->orWhereHas('giveaway', function ($g) use ($searchLower) {
+                      $g->whereRaw('LOWER(title) LIKE ?', ["%{$searchLower}%"]);
                   })
-                  ->orWhereHas('order.user', function ($u) use ($search) {
-                      $u->where('forenames', 'like', "%{$search}%")
-                        ->orWhere('surname', 'like', "%{$search}%")
-                        ->orWhereRaw("CONCAT(forenames, ' ', surname) LIKE ?", ["%{$search}%"]) // full name
-                        ->orWhere('email', 'like', "%{$search}%");
+                  ->orWhereHas('order.user', function ($u) use ($searchLower) {
+                      $u->whereRaw('LOWER(forenames) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw('LOWER(surname) LIKE ?', ["%{$searchLower}%"])
+                        ->orWhereRaw("LOWER(CONCAT(forenames, ' ', surname)) LIKE ?", ["%{$searchLower}%"]) // full name
+                        ->orWhereRaw('LOWER(email) LIKE ?', ["%{$searchLower}%"]);
                   });
             });
         }
