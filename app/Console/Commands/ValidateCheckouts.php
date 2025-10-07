@@ -29,8 +29,8 @@ class ValidateCheckouts extends Command
                 return;
             }
 
-            // Check for 5-minute timeout instead of 10 minutes
-            if ($order->created_at->lt(Carbon::now()->subMinutes(5))) {
+            // Check for 30-minute timeout for order payment
+            if ($order->created_at->lt(Carbon::now()->subMinutes(30))) {
                 $order->update(['status' => 'failed']);
                 // Clean up any giveaway_order records for failed orders
                 DB::table('giveaway_order')->where('order_id', $order->id)->delete();
