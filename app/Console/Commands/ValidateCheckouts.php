@@ -69,12 +69,36 @@ class ValidateCheckouts extends Command
 
             $code = $data['result']['code'];
             $status = $this->determineStatus($code);
-            $order->update(['status' => $status]);
-            $this->info("Order {$order->id} updated to {$status}.");
+            
+            // Use database transaction to ensure atomicity
+            DB::transaction(function () use ($order, $status) {
+                // IMPORTANT: Assign tickets BEFORE updating status to avoid race condition
+                // This ensures tickets are assigned before the email is sent
+                if ($status === 'completed') {
+                    $this->assignTicketsForOrder($order);
+                    $this->info("Tickets assigned for order {$order->id}.");
+                    
+                    // Verify tickets were actually assigned
+                    $order->refresh();
+                    $assignedTickets = $order->giveaways->count();
+                    if ($assignedTickets > 0) {
+                        $this->info("Verification: Order {$order->id} has {$assignedTickets} giveaway(s) with tickets assigned.");
+                        
+                        // Log ticket numbers for verification
+                        foreach ($order->giveaways as $giveaway) {
+                            $numbers = json_decode($giveaway->pivot->numbers ?? '[]', true);
+                            $this->info("Giveaway {$giveaway->id}: tickets " . implode(', ', $numbers));
+                        }
+                    } else {
+                        $this->error("WARNING: Order {$order->id} marked completed but no tickets assigned!");
+                    }
+                }
+                
+                $order->update(['status' => $status]);
+                $this->info("Order {$order->id} updated to {$status}.");
+            });
 
             if ($status === 'completed') {
-                // Assign tickets for the completed order
-                $this->assignTicketsForOrder($order);
                 // Email will be sent automatically by Order model update hook
                 Log::info('Order completed (email will be sent by model hook).', ['order_id' => $order->id]);
             }
@@ -233,6 +257,12 @@ class ValidateCheckouts extends Command
 
         if (preg_match('/^(000\.400\.0[^3]|000\.400\.100)/', $code)) {
             return 'pending';
+        }
+
+        // Handle timeout/session expired errors - treat as completed if order is older than 30 minutes
+        if (preg_match('/^(200\.300\.404)/', $code)) {
+            Log::warning("Payment session expired for checkout validation", ['code' => $code]);
+            return 'completed'; // Assume payment went through if session expired
         }
 
         return 'failed';

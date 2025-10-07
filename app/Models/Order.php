@@ -77,8 +77,24 @@ class Order extends Model
                     try {
                         $email = $order->user?->email;
                         if ($email) {
+                            // Ensure giveaways relationship is fresh loaded for email
+                            $order->load('giveaways');
+                            
+                            // Log ticket information before sending email
+                            $ticketInfo = [];
+                            foreach ($order->giveaways as $giveaway) {
+                                $numbers = json_decode($giveaway->pivot->numbers ?? '[]', true);
+                                $ticketInfo[] = "Giveaway {$giveaway->id}: " . implode(', ', $numbers);
+                            }
+                            Log::info('Sending order completed email with tickets', [
+                                'order_id' => $order->id,
+                                'user_email' => $email,
+                                'giveaways_count' => $order->giveaways->count(),
+                                'ticket_numbers' => $ticketInfo
+                            ]);
+                            
                             Mail::to($email)->send(new OrderCompleted($order));
-                            Log::info('Order completed email sent (on status update).', ['order_id' => $order->id]);
+                            Log::info('Order completed email sent successfully.', ['order_id' => $order->id]);
                         } else {
                             Log::warning('Order status updated to completed but user email missing.', ['order_id' => $order->id]);
                         }
