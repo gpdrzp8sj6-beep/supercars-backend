@@ -21,7 +21,7 @@ class PaymentController extends Controller
                 'request_size' => strlen($request->getContent())
             ]);
 
-            $key_from_configuration = env('OPPWA_KEY');
+            $key_from_configuration = $this->getWebhookKey();
             $iv_from_http_header = $request->header('X-Initialization-Vector');
             $auth_tag_from_http_header = $request->header('X-Authentication-Tag');
             $http_body = $request->getContent();
@@ -130,24 +130,38 @@ class PaymentController extends Controller
                 ]);
             }
 
-            // Get OPPWA configuration from environment
-            $environment = env('OPPWA_ENVIRONMENT', 'test'); // 'test' or 'prod'
-            $entityId = env('OPPWA_ENTITY_ID', '8ac7a4c7961768c301961b14272d05ed');
-            $bearerToken = env('OPPWA_BEARER_TOKEN', 'MjRkYWM1YWItZjkyNy00YzBjLTgwZjctMDEzZDZiY2MxN2I4Omw4amxvaURKeEg=');
+            // Get OPPWA configuration from config file
+            $environment = config('oppwa.environment', 'test'); // 'test' or 'prod'
+            $envKey = $environment === 'prod' ? 'production' : 'test';
             
-            // Set the correct API endpoint based on environment
-            $baseUrl = $environment === 'prod' 
-                ? 'https://eu-prod.oppwa.com' 
-                : 'https://eu-test.oppwa.com';
+            $baseUrl = config("oppwa.{$envKey}.base_url");
+            $entityId = config("oppwa.{$envKey}.entity_id");
+            $bearerToken = config("oppwa.{$envKey}.bearer_token");
             
             $url = "{$baseUrl}/v1/checkouts";
             $data = "entityId={$entityId}" .
                         "&amount=" . $amount .
-                        "&currency=GBP" .
-                        "&paymentType=DB" .
+                        "&currency=" . config('oppwa.payment.currency', 'GBP') .
+                        "&paymentType=" . config('oppwa.payment.payment_type', 'DB') .
                         "&customer.email=" . $user->email .
                         "&customer.givenName=" . $user->forenames;
 
+            // Add 3D Secure test parameters if enabled
+            if (config('oppwa.3ds_testing.enabled', false)) {
+                $data .= "&customParameters[3DS2_enrolled]=true";
+                
+                $flowType = config('oppwa.3ds_testing.flow', 'challenge');
+                $data .= "&customParameters[3DS2_flow]={$flowType}";
+                
+                if ($flowType === 'challenge') {
+                    $data .= "&threeDSecure.challengeIndicator=04";
+                }
+                
+                Log::info('3D Secure test parameters added to checkout', [
+                    'order_id' => $order->id,
+                    'flow_type' => $flowType
+                ]);
+            }
 
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, $url);
@@ -430,5 +444,16 @@ class PaymentController extends Controller
                 'message' => 'Test webhook failed: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Get the webhook key for the current environment
+     */
+    private function getWebhookKey(): string
+    {
+        $environment = config('oppwa.environment', 'test');
+        $envKey = $environment === 'prod' ? 'production' : 'test';
+        
+        return config("oppwa.{$envKey}.webhook_key");
     }
 }
