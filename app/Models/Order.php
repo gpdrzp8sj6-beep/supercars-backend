@@ -8,6 +8,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
 use App\Mail\OrderCompleted;
+use App\Mail\OrderReceived;
 
 class Order extends Model
 {
@@ -49,31 +50,32 @@ class Order extends Model
 
     protected static function booted(): void
     {
-        // On create: if status already completed, send email
+        // On create: always send order received email
         static::created(function (Order $order) {
-            if (($order->status ?? null) === 'completed') {
-                try {
-                    $email = $order->user?->email;
-                    if ($email) {
-                        Mail::to($email)->send(new OrderCompleted($order));
-                        Log::info('Order completed email sent (on create).', ['order_id' => $order->id]);
-                    } else {
-                        Log::warning('Order completed (on create) but user email missing.', ['order_id' => $order->id]);
-                    }
-                } catch (\Throwable $ex) {
-                    Log::error('Failed to send order completed email (on create): ' . $ex->getMessage(), [
-                        'order_id' => $order->id,
-                        'exception' => $ex,
-                    ]);
+            try {
+                $email = $order->user?->email;
+                if ($email) {
+                    Mail::to($email)->send(new OrderReceived($order));
+                    Log::info('Order received email sent.', ['order_id' => $order->id]);
+                } else {
+                    Log::warning('Order created but user email missing.', ['order_id' => $order->id]);
                 }
+            } catch (\Throwable $ex) {
+                Log::error('Failed to send order received email: ' . $ex->getMessage(), [
+                    'order_id' => $order->id,
+                    'exception' => $ex,
+                ]);
             }
         });
 
-        // On update: when status transitions to completed, send email
+        // On update: when status transitions to completed or failed, send payment confirmation email
         static::updated(function (Order $order) {
             if ($order->wasChanged('status')) {
                 $original = $order->getOriginal('status');
-                if ($original !== 'completed' && $order->status === 'completed') {
+                $newStatus = $order->status;
+                
+                // Send payment confirmation email when payment is resolved (completed or failed)
+                if ($original !== $newStatus && in_array($newStatus, ['completed', 'failed'])) {
                     try {
                         $email = $order->user?->email;
                         if ($email) {
@@ -86,21 +88,29 @@ class Order extends Model
                                 $numbers = json_decode($giveaway->pivot->numbers ?? '[]', true);
                                 $ticketInfo[] = "Giveaway {$giveaway->id}: " . implode(', ', $numbers);
                             }
-                            Log::info('Sending order completed email with tickets', [
+                            Log::info('Sending payment confirmation email', [
                                 'order_id' => $order->id,
                                 'user_email' => $email,
+                                'payment_status' => $newStatus,
                                 'giveaways_count' => $order->giveaways->count(),
                                 'ticket_numbers' => $ticketInfo
                             ]);
                             
                             Mail::to($email)->send(new OrderCompleted($order));
-                            Log::info('Order completed email sent successfully.', ['order_id' => $order->id]);
+                            Log::info('Payment confirmation email sent successfully.', [
+                                'order_id' => $order->id,
+                                'status' => $newStatus
+                            ]);
                         } else {
-                            Log::warning('Order status updated to completed but user email missing.', ['order_id' => $order->id]);
+                            Log::warning('Payment status updated but user email missing.', [
+                                'order_id' => $order->id,
+                                'status' => $newStatus
+                            ]);
                         }
                     } catch (\Throwable $ex) {
-                        Log::error('Failed to send order completed email (on update): ' . $ex->getMessage(), [
+                        Log::error('Failed to send payment confirmation email: ' . $ex->getMessage(), [
                             'order_id' => $order->id,
+                            'status' => $newStatus,
                             'exception' => $ex,
                         ]);
                     }

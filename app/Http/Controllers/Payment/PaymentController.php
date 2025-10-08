@@ -224,52 +224,82 @@ class PaymentController extends Controller
 
         // Determine order status based on result code
         $status = $this->determineOrderStatus($resultCode);
+        $previousStatus = $order->status;
 
         Log::info('Processing webhook for order', [
             'order_id' => $order->id,
             'checkout_id' => $checkoutId,
             'result_code' => $resultCode,
-            'determined_status' => $status
+            'previous_status' => $previousStatus,
+            'determined_status' => $status,
+            'status_changed' => $previousStatus !== $status
         ]);
 
         // Use database transaction to ensure atomicity
-        DB::transaction(function () use ($order, $status) {
+        DB::transaction(function () use ($order, $status, $previousStatus) {
             // For completed orders, assign tickets before updating status
             if ($status === 'completed') {
                 $this->assignTicketsForOrder($order);
                 Log::info('Tickets assigned for order via webhook', ['order_id' => $order->id]);
             }
 
-            // Update order status
-            $order->update(['status' => $status]);
-            Log::info('Order status updated via webhook', [
-                'order_id' => $order->id,
-                'new_status' => $status
-            ]);
+            // Update order status only if it has changed
+            if ($previousStatus !== $status) {
+                $order->update(['status' => $status]);
+                Log::info('Order status updated via webhook', [
+                    'order_id' => $order->id,
+                    'old_status' => $previousStatus,
+                    'new_status' => $status
+                ]);
+            } else {
+                Log::info('Order status unchanged via webhook', [
+                    'order_id' => $order->id,
+                    'status' => $status
+                ]);
+            }
         });
     }
 
     private function determineOrderStatus(string $resultCode): string
     {
-        // Based on OPPWA result codes
+        // Success codes - payment completed successfully
         if (preg_match('/^(000\.000\.|000\.100\.1|000\.[36]|000\.400\.[1][12]0)/', $resultCode)) {
+            Log::info("Payment successful", ['result_code' => $resultCode]);
             return 'completed';
         }
 
+        // Pending codes - payment under review, on hold, or requires manual verification
         if (preg_match('/^(000\.200|800\.400\.5|100\.400\.500)/', $resultCode)) {
+            Log::info("Payment pending - under review", ['result_code' => $resultCode]);
             return 'pending';
         }
 
+        // Additional pending codes for manual verification/fraud checks
         if (preg_match('/^(000\.400\.0[^3]|000\.400\.100)/', $resultCode)) {
+            Log::info("Payment pending - manual verification required", ['result_code' => $resultCode]);
+            return 'pending';
+        }
+
+        // Payment hold codes - funds are held for verification
+        if (preg_match('/^(800\.400\.1|800\.400\.2|800\.400\.3|800\.400\.4)/', $resultCode)) {
+            Log::info("Payment on hold - verification needed", ['result_code' => $resultCode]);
+            return 'pending';
+        }
+
+        // Awaiting final payment capture/settlement
+        if (preg_match('/^(000\.400\.020|000\.400\.030)/', $resultCode)) {
+            Log::info("Payment awaiting capture/settlement", ['result_code' => $resultCode]);
             return 'pending';
         }
 
         // Handle timeout/session expired errors - these should be treated as failed
         if (preg_match('/^(200\.300\.404)/', $resultCode)) {
-            Log::warning("Payment session expired - marking order as failed", ['code' => $resultCode]);
+            Log::warning("Payment session expired - marking order as failed", ['result_code' => $resultCode]);
             return 'failed';
         }
 
+        // Default to failed for unrecognized codes
+        Log::warning("Unknown payment result code - marking as failed", ['result_code' => $resultCode]);
         return 'failed';
     }
 

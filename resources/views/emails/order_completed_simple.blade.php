@@ -18,20 +18,46 @@
             <img src="{!! asset('logo-light.png') !!}" alt="{{ $companyName }}" style="height:60px; width: auto; max-width: 200px; margin-bottom:8px;" />
         </div>
 
-        <h1 style="color: #e85c2b; text-align: center; margin-bottom: 20px;">YOUR LUCKY TICKET NUMBERS ARE LOCKED IN!</h1>
+        <h1 style="color: #e85c2b; text-align: center; margin-bottom: 20px;">
+            @if($order->status === 'completed')
+                PAYMENT CONFIRMED - YOUR LUCKY NUMBERS ARE LOCKED IN!
+            @else
+                PAYMENT UPDATE - ORDER STATUS CHANGED
+            @endif
+        </h1>
 
         <p style="font-size: 16px; margin-bottom: 20px;">
-            Hi {!! $user->forenames !!} {!! $user->surname !!}, Thank you for your entry, you can find a full breakdown of your order below. Make sure you're following us on socials to stay up to date with the live draw; you could be the next big winner!
+            Hi {!! $user->forenames !!} {!! $user->surname !!},
+            @if($order->status === 'completed')
+                Great news! Your payment has been confirmed and your lucky ticket numbers have been assigned. You can find a full breakdown below. Make sure you're following us on socials to stay up to date with the live draw; you could be the next big winner!
+            @else
+                We're writing to update you on the status of your order. Please see the details below.
+            @endif
         </p>
 
         <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
 
         <p><strong>Order number:</strong> <span style="color:#e85c2b; font-weight:bold;">#{!! $order->id !!}</span><br>
-        <strong>Ordered on:</strong> {!! $order->created_at->format('j M Y \a\t H:i') !!}</p>
+        <strong>Ordered on:</strong> {!! $order->created_at->format('j M Y \a\t H:i') !!}<br>
+        <strong>Payment Status:</strong> 
+        @if($order->status === 'completed')
+            <span style="color: #22c55e; font-weight: bold;">✓ CONFIRMED</span>
+        @elseif($order->status === 'failed')
+            <span style="color: #ef4444; font-weight: bold;">✗ FAILED</span>
+        @else
+            <span style="color: #f59e0b; font-weight: bold;">{{ strtoupper($order->status) }}</span>
+        @endif
+        </p>
 
         <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
 
-        <h2 style="color: #333; margin-bottom: 15px;">Live Draw entries</h2>
+        <h2 style="color: #333; margin-bottom: 15px;">
+            @if($order->status === 'completed')
+                Your Lucky Numbers
+            @else
+                Order Details
+            @endif
+        </h2>
 
         @if($order->giveaways && $order->giveaways->count() > 0)
             @foreach($order->giveaways as $giveaway)
@@ -55,12 +81,16 @@
             </div>
 
             <p><strong>Quantity:</strong> {!! $quantity !!}<br>
-            <strong>Draw numbers:</strong> {!! implode(', ', $numbers) !!}<br>
+            @if($order->status === 'completed')
+                <strong>Draw numbers:</strong> {!! implode(', ', $numbers) !!}<br>
+            @else
+                <strong>Status:</strong> Payment {{ $order->status }}<br>
+            @endif
             <strong>Draw date:</strong> {!! $giveaway->closes_at->format('l j F Y \a\t H:i') !!}</p>
 
             @endforeach
         @else
-            <!-- Fallback: Get giveaways from cart data if not attached -->
+            <!-- Fallback: Get giveaways from cart data - this should only happen for older orders -->
             @if($order->cart && is_array($order->cart))
                 @foreach($order->cart as $cartItem)
                 @php
@@ -85,10 +115,10 @@
                 </div>
 
                 <p><strong>Quantity:</strong> {!! $quantity !!}<br>
-                @if(!empty($numbers))
-                    <strong>Draw numbers:</strong> {!! is_array($numbers) ? implode(', ', $numbers) : $numbers !!}<br>
+                @if($order->status === 'completed')
+                    <strong>Draw numbers:</strong> Your tickets are being processed and will be assigned shortly<br>
                 @else
-                    <strong>Draw numbers:</strong> Will be assigned after payment confirmation<br>
+                    <strong>Status:</strong> Payment {{ $order->status }}<br>
                 @endif
                 <strong>Draw date:</strong> {!! $giveaway->closes_at->format('l j F Y \a\t H:i') !!}</p>
                 @endif
@@ -100,6 +130,22 @@
         @endif
 
         <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+
+        @if($order->status === 'failed')
+        <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 20px; margin: 20px 0;">
+            <h3 style="color: #dc2626; margin: 0 0 15px 0;">Payment Not Completed</h3>
+            <p style="color: #7f1d1d; margin: 0 0 15px 0;">Unfortunately, we were unable to process your payment for this order. This could be due to:</p>
+            <ul style="color: #7f1d1d; margin: 0 0 15px 20px;">
+                <li>Insufficient funds</li>
+                <li>Card security checks</li>
+                <li>Bank authorization issues</li>
+                <li>Technical difficulties</li>
+            </ul>
+            <p style="color: #7f1d1d; margin: 0;">
+                <strong>What can you do?</strong> You can try placing a new order or contact us for assistance at <a href="mailto:{!! $email !!}" style="color: #dc2626;">{!! $email !!}</a>
+            </p>
+        </div>
+        @endif
 
         <h2 style="color: #333; margin-bottom: 15px;">Payment Summary</h2>
 
