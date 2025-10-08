@@ -149,23 +149,6 @@ class PaymentController extends Controller
                         "&customer.email=" . $user->email .
                         "&customer.givenName=" . $user->forenames;
 
-            // Add 3D Secure test parameters if enabled
-            if (config('oppwa.3ds_testing.enabled', false)) {
-                $data .= "&customParameters[3DS2_enrolled]=true";
-                
-                $flowType = config('oppwa.3ds_testing.flow', 'challenge');
-                $data .= "&customParameters[3DS2_flow]={$flowType}";
-                
-                if ($flowType === 'challenge') {
-                    $data .= "&threeDSecure.challengeIndicator=04";
-                }
-                
-                Log::info('3D Secure test parameters added to checkout', [
-                    'order_id' => $order->id,
-                    'flow_type' => $flowType
-                ]);
-            }
-
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, $url);
             curl_setopt($ch, CURLOPT_HTTPHEADER, array(

@@ -12,7 +12,7 @@ return [
     */
 
     // Environment: 'test' or 'prod'
-    'environment' => env('OPPWA_ENVIRONMENT', 'test'),
+    'environment' => env('OPPWA_ENVIRONMENT', 'production'),
 
     /*
     |--------------------------------------------------------------------------
