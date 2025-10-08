@@ -130,7 +130,7 @@ class PaymentController extends Controller
                 ]);
             }
 
-            $url = "https://eu-test.oppwa.com/v1/checkouts";
+            $url = "https://eu-prod.oppwa.com/v1/checkouts";
             $data = "entityId=8ac9a4cd9662a1bc0196687d626128ad" .
                         "&amount=" . $amount .
                         "&currency=GBP" .
@@ -160,7 +160,7 @@ class PaymentController extends Controller
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, $url);
             curl_setopt($ch, CURLOPT_HTTPHEADER, array(
-                           'Authorization: Bearer MjRkYWM1YWItZjkyNy00YzBjLTgwZjctMDEzZDZiY2MxN2I4Omw4amxvaURKeEg='));
+                           'Authorization: Bearer OGFjOWE0Y2M5NjYyYWIxZDAxOTY2ODdkNjFhMjI5MzN8UWltamM6IWZIRVpBejMlcnBiZzY='));
             curl_setopt($ch, CURLOPT_POST, 1);
             curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);// this should be set to true in production
