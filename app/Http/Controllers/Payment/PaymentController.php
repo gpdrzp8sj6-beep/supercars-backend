@@ -35,12 +35,30 @@ class PaymentController extends Controller
             $auth_tag_from_http_header = $request->header('X-Authentication-Tag');
             $http_body = $request->getContent();
 
+            // Validate required headers
+            if (!$iv_from_http_header) {
+                Log::error('Missing X-Initialization-Vector header');
+                throw new \RuntimeException('Missing X-Initialization-Vector header');
+            }
+            
+            if (!$auth_tag_from_http_header) {
+                Log::error('Missing X-Authentication-Tag header');
+                throw new \RuntimeException('Missing X-Authentication-Tag header');
+            }
+            
+            if (!$key_from_configuration) {
+                Log::error('Webhook key not configured for current environment');
+                throw new \RuntimeException('Webhook key not configured');
+            }
+
             // Log the raw inputs (without sensitive data if needed)
             Log::debug('Webhook decryption inputs received', [
                 'iv_header_length' => strlen($iv_from_http_header),
                 'auth_tag_header_length' => strlen($auth_tag_from_http_header),
                 'body_length' => strlen($http_body),
-                'key_configured' => $key_from_configuration ? 'yes' : 'no'
+                'key_configured' => $key_from_configuration ? 'yes' : 'no',
+                'key_length_raw' => strlen($key_from_configuration),
+                'key_preview' => $key_from_configuration ? substr($key_from_configuration, 0, 8) . '...' : 'NONE'
             ]);
 
             $key = hex2bin($key_from_configuration);
@@ -56,11 +74,37 @@ class PaymentController extends Controller
                 'cipher_text_length' => strlen($cipher_text)
             ]);
 
+            // Additional validation logging before decryption
+            Log::info('Pre-decryption validation', [
+                'key_valid' => strlen($key) === 32 ? 'YES' : 'NO (expected 32, got ' . strlen($key) . ')',
+                'iv_valid' => strlen($iv) === 12 ? 'YES' : 'NO (expected 12, got ' . strlen($iv) . ')',
+                'auth_tag_valid' => strlen($auth_tag) === 16 ? 'YES' : 'NO (expected 16, got ' . strlen($auth_tag) . ')',
+                'cipher_text_valid' => strlen($cipher_text) > 0 ? 'YES' : 'NO',
+                'headers_received' => [
+                    'iv_header' => $iv_from_http_header ? 'SET' : 'MISSING',
+                    'auth_tag_header' => $auth_tag_from_http_header ? 'SET' : 'MISSING'
+                ]
+            ]);
+
             $decryptedData = openssl_decrypt($cipher_text, "aes-256-gcm", $key, OPENSSL_RAW_DATA, $iv, $auth_tag);
 
             if ($decryptedData === false) {
-                $error = 'Decryption failed: ' . openssl_error_string();
-                Log::error($error);
+                $opensslError = openssl_error_string();
+                $error = 'Decryption failed: ' . ($opensslError ?: 'Unknown OpenSSL error');
+                
+                Log::error('Webhook decryption failure details', [
+                    'openssl_error' => $opensslError,
+                    'key_source' => 'config',
+                    'environment' => config('oppwa.environment'),
+                    'error_message' => $error,
+                    'validation_summary' => [
+                        'key_length_correct' => strlen($key) === 32,
+                        'iv_length_correct' => strlen($iv) === 12,
+                        'auth_tag_length_correct' => strlen($auth_tag) === 16,
+                        'cipher_text_not_empty' => strlen($cipher_text) > 0
+                    ]
+                ]);
+                
                 throw new \RuntimeException($error);
             }
 
