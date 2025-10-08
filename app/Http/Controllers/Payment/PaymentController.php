@@ -130,9 +130,18 @@ class PaymentController extends Controller
                 ]);
             }
 
-            $url = "https://eu-test.oppwa.com/v1/checkouts";
-            // $data = "entityId=8ac9a4cd9662a1bc0196687d626128ad" .
-            $data = "entityId=8ac7a4c7961768c301961b14272d05ed" .
+            // Get OPPWA configuration from environment
+            $environment = env('OPPWA_ENVIRONMENT', 'test'); // 'test' or 'prod'
+            $entityId = env('OPPWA_ENTITY_ID', '8ac7a4c7961768c301961b14272d05ed');
+            $bearerToken = env('OPPWA_BEARER_TOKEN', 'MjRkYWM1YWItZjkyNy00YzBjLTgwZjctMDEzZDZiY2MxN2I4Omw4amxvaURKeEg=');
+            
+            // Set the correct API endpoint based on environment
+            $baseUrl = $environment === 'prod' 
+                ? 'https://eu-prod.oppwa.com' 
+                : 'https://eu-test.oppwa.com';
+            
+            $url = "{$baseUrl}/v1/checkouts";
+            $data = "entityId={$entityId}" .
                         "&amount=" . $amount .
                         "&currency=GBP" .
                         "&paymentType=DB" .
@@ -143,7 +152,7 @@ class PaymentController extends Controller
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, $url);
             curl_setopt($ch, CURLOPT_HTTPHEADER, array(
-                           'Authorization: Bearer OGFjOWE0Y2M5NjYyYWIxZDAxOTY2ODdkNjFhMjI5MzN8UWltamM6IWZIRVpBejMlcnBiZzY='));
+                           "Authorization: Bearer {$bearerToken}"));
             curl_setopt($ch, CURLOPT_POST, 1);
             curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);// this should be set to true in production

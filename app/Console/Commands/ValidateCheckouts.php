@@ -47,7 +47,7 @@ class ValidateCheckouts extends Command
             $ch = curl_init();
             curl_setopt_array($ch, [
                 CURLOPT_URL => $url,
-                CURLOPT_HTTPHEADER => ['Authorization:Bearer OGFjOWE0Y2M5NjYyYWIxZDAxOTY2ODdkNjFhMjI5MzN8UWltamM6IWZIRVpBejMlcnBiZzY='],
+                CURLOPT_HTTPHEADER => ['Authorization:Bearer MjRkYWM1YWItZjkyNy00YzBjLTgwZjctMDEzZDZiY2MxN2I4Omw4amxvaURKeEg='],
                 CURLOPT_CUSTOMREQUEST => 'GET',
                 CURLOPT_SSL_VERIFYPEER => true,
                 CURLOPT_RETURNTRANSFER => true,
