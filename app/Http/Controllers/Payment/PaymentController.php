@@ -66,14 +66,6 @@ class PaymentController extends Controller
             $auth_tag = hex2bin($auth_tag_from_http_header);
             $cipher_text = hex2bin($http_body);
 
-            // Log the binary conversion
-            Log::debug('Binary conversion results', [
-                'key_length' => strlen($key),
-                'iv_length' => strlen($iv),
-                'auth_tag_length' => strlen($auth_tag),
-                'cipher_text_length' => strlen($cipher_text)
-            ]);
-
             // Additional validation logging before decryption
             Log::info('Pre-decryption validation', [
                 'key_valid' => strlen($key) === 32 ? 'YES' : 'NO (expected 32, got ' . strlen($key) . ')',
@@ -86,7 +78,35 @@ class PaymentController extends Controller
                 ]
             ]);
 
+            // Try decryption with current environment key
             $decryptedData = openssl_decrypt($cipher_text, "aes-256-gcm", $key, OPENSSL_RAW_DATA, $iv, $auth_tag);
+
+            // If decryption fails, try with opposite environment key as fallback
+            if ($decryptedData === false) {
+                Log::warning('Primary key failed, trying fallback key');
+                
+                $currentEnv = config('oppwa.environment', 'test');
+                $fallbackEnvKey = $currentEnv === 'prod' ? 'test' : 'production';
+                $fallbackKey = config("oppwa.{$fallbackEnvKey}.webhook_key");
+                
+                if ($fallbackKey && $fallbackKey !== $key_from_configuration) {
+                    Log::info('Attempting decryption with fallback key', [
+                        'current_env' => $currentEnv,
+                        'fallback_env' => $fallbackEnvKey,
+                        'fallback_key_set' => 'YES'
+                    ]);
+                    
+                    $fallbackKeyBin = hex2bin($fallbackKey);
+                    $decryptedData = openssl_decrypt($cipher_text, "aes-256-gcm", $fallbackKeyBin, OPENSSL_RAW_DATA, $iv, $auth_tag);
+                    
+                    if ($decryptedData !== false) {
+                        Log::warning('Fallback key succeeded! Environment configuration may be incorrect', [
+                            'configured_env' => $currentEnv,
+                            'working_env' => $fallbackEnvKey
+                        ]);
+                    }
+                }
+            }
 
             if ($decryptedData === false) {
                 $opensslError = openssl_error_string();
@@ -102,7 +122,8 @@ class PaymentController extends Controller
                         'iv_length_correct' => strlen($iv) === 12,
                         'auth_tag_length_correct' => strlen($auth_tag) === 16,
                         'cipher_text_not_empty' => strlen($cipher_text) > 0
-                    ]
+                    ],
+                    'tried_fallback' => isset($fallbackKey) ? 'YES' : 'NO'
                 ]);
                 
                 throw new \RuntimeException($error);
