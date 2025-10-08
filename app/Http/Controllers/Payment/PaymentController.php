@@ -18,10 +18,16 @@ class PaymentController extends Controller
     public function handle(Request $request)
     {
         try {
-            // Log the start of the process
-            Log::info('Starting OPPWA webhook processing', [
+            // Log the start of the process with OPPWA config
+            $environment = config('oppwa.environment', 'test');
+            $envKey = $environment === 'prod' ? 'production' : 'test';
+            
+            Log::info('Starting OPPWA webhook processing with configuration', [
+                'environment_config' => $environment,
+                'env_key_used' => $envKey,
                 'headers' => $request->headers->all(),
-                'request_size' => strlen($request->getContent())
+                'request_size' => strlen($request->getContent()),
+                'timestamp' => now()->toISOString()
             ]);
 
             $key_from_configuration = $this->getWebhookKey();
@@ -140,6 +146,20 @@ class PaymentController extends Controller
             $baseUrl = config("oppwa.{$envKey}.base_url");
             $entityId = config("oppwa.{$envKey}.entity_id");
             $bearerToken = config("oppwa.{$envKey}.bearer_token");
+            
+            // Log OPPWA configuration being used for checkout
+            Log::info('OPPWA Configuration - createCheckout()', [
+                'environment_config' => $environment,
+                'env_key_used' => $envKey,
+                'base_url' => $baseUrl,
+                'entity_id' => $entityId,
+                'bearer_token_configured' => $bearerToken ? 'YES' : 'NO',
+                'bearer_token_length' => $bearerToken ? strlen($bearerToken) : 0,
+                'bearer_token_preview' => $bearerToken ? substr($bearerToken, 0, 12) . '...' : 'NONE',
+                'currency' => config('oppwa.payment.currency', 'GBP'),
+                'payment_type' => config('oppwa.payment.payment_type', 'DB'),
+                'amount' => $amount
+            ]);
             
             $url = "{$baseUrl}/v1/checkouts";
             $data = "entityId={$entityId}" .
@@ -601,9 +621,19 @@ class PaymentController extends Controller
      */
     private function getWebhookKey(): string
     {
-        $environment = config('oppwa.environment', 'test');
-        $envKey = $environment === 'prod' ? 'production' : 'test';
+        $environment = config('oppwa.environment', 'production');
+        $envKey = $environment === 'production' ? 'production' : 'test';
+        $webhookKey = config("oppwa.{$envKey}.webhook_key");
         
-        return config("oppwa.{$envKey}.webhook_key");
+        // Log OPPWA configuration being used
+        Log::info('OPPWA Configuration - getWebhookKey()', [
+            'environment_config' => $environment,
+            'env_key_used' => $envKey,
+            'webhook_key_configured' => $webhookKey ? 'YES' : 'NO',
+            'webhook_key_length' => $webhookKey ? strlen($webhookKey) : 0,
+            'webhook_key_preview' => $webhookKey ? substr($webhookKey, 0, 8) . '...' : 'NONE'
+        ]);
+        
+        return $webhookKey;
     }
 }
