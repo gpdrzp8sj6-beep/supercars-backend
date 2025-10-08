@@ -499,6 +499,15 @@ class PaymentController extends Controller
             ->values()
             ->toArray();
 
+        Log::info('Checking available numbers for giveaway', [
+            'giveaway_id' => $giveaway->id,
+            'total_tickets' => $giveaway->ticketsTotal,
+            'amount_requested' => $amount,
+            'taken_numbers_count' => count($takenNumbers),
+            'taken_numbers' => $takenNumbers,
+            'requested_numbers' => $requestedNumbers
+        ]);
+
         $availableNumbers = [];
 
         // First, try to assign requested numbers if available
@@ -511,12 +520,20 @@ class PaymentController extends Controller
         }
 
         // Fill remaining slots with any available numbers
-        $maxNumber = $giveaway->totalTickets;
+        $maxNumber = $giveaway->ticketsTotal;
         for ($i = 1; $i <= $maxNumber && count($availableNumbers) < $amount; $i++) {
             if (!in_array($i, $takenNumbers) && !in_array($i, $availableNumbers)) {
                 $availableNumbers[] = $i;
             }
         }
+
+        Log::info('Available numbers result', [
+            'giveaway_id' => $giveaway->id,
+            'available_numbers' => $availableNumbers,
+            'available_count' => count($availableNumbers),
+            'needed_count' => $amount,
+            'success' => count($availableNumbers) >= $amount
+        ]);
 
         return $availableNumbers;
     }
