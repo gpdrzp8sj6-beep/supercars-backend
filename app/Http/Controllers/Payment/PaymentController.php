@@ -130,7 +130,7 @@ class PaymentController extends Controller
                 ]);
             }
 
-            $url = "https://eu-prod.oppwa.com/v1/checkouts";
+            $url = "https://eu-test.oppwa.com/v1/checkouts";
             $data = "entityId=8ac9a4cd9662a1bc0196687d626128ad" .
                         "&amount=" . $amount .
                         "&currency=GBP" .
