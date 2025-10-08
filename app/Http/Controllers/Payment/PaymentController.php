@@ -246,10 +246,18 @@ class PaymentController extends Controller
             // Update order status only if it has changed
             if ($previousStatus !== $status) {
                 $order->update(['status' => $status]);
+                
+                // Refresh the order to ensure the giveaways relationship is properly loaded for email
+                $order->refresh();
+                $order->load(['giveaways' => function($query) {
+                    $query->withPivot(['numbers', 'amount']);
+                }]);
+                
                 Log::info('Order status updated via webhook', [
                     'order_id' => $order->id,
                     'old_status' => $previousStatus,
-                    'new_status' => $status
+                    'new_status' => $status,
+                    'giveaways_count' => $order->giveaways->count()
                 ]);
             } else {
                 Log::info('Order status unchanged via webhook', [
@@ -361,8 +369,14 @@ class PaymentController extends Controller
             ];
         }
 
-        // Attach the giveaways to the order
-        $order->giveaways()->attach($attachData);
+        // Sync the giveaways to the order (this will replace any existing attachments)
+        $order->giveaways()->sync($attachData);
+        
+        Log::info('Tickets assigned for order', [
+            'order_id' => $order->id,
+            'attach_data' => $attachData,
+            'total_giveaways' => count($attachData)
+        ]);
     }
 
     private function getAvailableNumbers($giveaway, $amount, $requestedNumbers = [])

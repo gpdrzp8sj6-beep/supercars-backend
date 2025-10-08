@@ -60,10 +60,11 @@
         </h2>
 
         @if($order->giveaways && $order->giveaways->count() > 0)
+            {{-- DEBUG: Using giveaways relationship - this should show ticket numbers --}}
             @foreach($order->giveaways as $giveaway)
             @php
             $numbers = json_decode($giveaway->pivot->numbers ?? '[]', true);
-            $quantity = count($numbers);
+            $quantity = $giveaway->pivot->amount ?? count($numbers);
             @endphp
 
             <div style="border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin: 10px 0; background: #f9f9f9;">
@@ -81,8 +82,10 @@
             </div>
 
             <p><strong>Quantity:</strong> {!! $quantity !!}<br>
-            @if($order->status === 'completed')
+            @if($order->status === 'completed' && !empty($numbers))
                 <strong>Draw numbers:</strong> {!! implode(', ', $numbers) !!}<br>
+            @elseif($order->status === 'completed')
+                <strong>Draw numbers:</strong> Your ticket numbers are being assigned - you'll receive an update shortly<br>
             @else
                 <strong>Status:</strong> Payment {{ $order->status }}<br>
             @endif
@@ -90,7 +93,7 @@
 
             @endforeach
         @else
-            <!-- Fallback: Get giveaways from cart data - this should only happen for older orders -->
+            {{-- DEBUG: Fallback to cart data - this should NOT happen for completed orders --}}
             @if($order->cart && is_array($order->cart))
                 @foreach($order->cart as $cartItem)
                 @php

@@ -79,8 +79,10 @@ class Order extends Model
                     try {
                         $email = $order->user?->email;
                         if ($email) {
-                            // Ensure giveaways relationship is fresh loaded for email
-                            $order->load('giveaways');
+                            // Ensure giveaways relationship is fresh loaded with pivot data for email
+                            $order->load(['giveaways' => function($query) {
+                                $query->withPivot(['numbers', 'amount']);
+                            }]);
                             
                             // Log ticket information before sending email
                             $ticketInfo = [];
@@ -93,7 +95,8 @@ class Order extends Model
                                 'user_email' => $email,
                                 'payment_status' => $newStatus,
                                 'giveaways_count' => $order->giveaways->count(),
-                                'ticket_numbers' => $ticketInfo
+                                'ticket_numbers' => $ticketInfo,
+                                'has_pivot_numbers' => $order->giveaways->first()?->pivot?->numbers ? 'yes' : 'no'
                             ]);
                             
                             Mail::to($email)->send(new OrderCompleted($order));

@@ -15,7 +15,10 @@ class OrderCompleted extends Mailable
 
     public function __construct(Order $order)
     {
-        $this->order = $order->fresh(['user', 'giveaways']);
+        // Force fresh load with all necessary relationships and pivot data
+        $this->order = $order->fresh(['user', 'giveaways' => function($query) {
+            $query->withPivot(['numbers', 'amount']);
+        }]);
     }
 
     public function build()
