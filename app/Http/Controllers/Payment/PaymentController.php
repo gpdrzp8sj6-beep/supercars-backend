@@ -131,7 +131,8 @@ class PaymentController extends Controller
             }
 
             $url = "https://eu-test.oppwa.com/v1/checkouts";
-            $data = "entityId=8ac9a4cd9662a1bc0196687d626128ad" .
+            // $data = "entityId=8ac9a4cd9662a1bc0196687d626128ad" .
+            $data = "entityId=8ac7a4c7961768c301961b14272d05ed" .
                         "&amount=" . $amount .
                         "&currency=GBP" .
                         "&paymentType=DB" .
