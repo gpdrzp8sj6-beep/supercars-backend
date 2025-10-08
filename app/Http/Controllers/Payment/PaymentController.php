@@ -93,6 +93,14 @@ class PaymentController extends Controller
        return $resultCode === '000.000.000' ? 'completed' : 'failed';
     }
 
+    /**
+     * Generate a checkout session for payment processing
+     * 
+     * 3D Secure Testing:
+     * - Set ENABLE_3DS_TEST_MODE=true in .env to enable test parameters
+     * - Set 3DS_TEST_FLOW=challenge or 3DS_TEST_FLOW=frictionless to control flow
+     * - These parameters allow testing 3DS with any test card
+     */
     function generateCheckout(Request $request) {
         try {
             $request->validate([
@@ -130,6 +138,25 @@ class PaymentController extends Controller
                         "&customer.email=" . $user->email .
                         "&customer.givenName=" . $user->forenames;
 
+            // Add 3D Secure test parameters if in test/webhook testing mode
+            if (env('ENABLE_3DS_TEST_MODE', true)) {
+                $data .= "&customParameters[3DS2_enrolled]=true";
+                
+                // Optional: specify flow type (challenge or frictionless)
+                $flowType = env('3DS_TEST_FLOW', 'challenge'); // 'challenge' or 'frictionless'
+                $data .= "&customParameters[3DS2_flow]={$flowType}";
+                
+                // Optional: force challenge flow with challengeIndicator
+                if ($flowType === 'challenge') {
+                    $data .= "&threeDSecure.challengeIndicator=04";
+                }
+                
+                Log::info('3D Secure test parameters added to checkout', [
+                    'order_id' => $order->id,
+                    'flow_type' => $flowType
+                ]);
+            }
+
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, $url);
             curl_setopt($ch, CURLOPT_HTTPHEADER, array(
@@ -140,6 +167,10 @@ class PaymentController extends Controller
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             $responseData = json_decode(curl_exec($ch), true);
             if(curl_errno($ch)) {
+                Log::error('cURL error occurred while generating checkout', [
+                    'order_id' => $order->id,
+                    'error' => curl_error($ch)
+                ]);
                 return curl_error($ch);
             }
             curl_close($ch);
