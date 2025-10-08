@@ -139,24 +139,6 @@ class PaymentController extends Controller
                         "&customer.email=" . $user->email .
                         "&customer.givenName=" . $user->forenames;
 
-            // Add 3D Secure test parameters if in test/webhook testing mode
-            if (env('ENABLE_3DS_TEST_MODE', true)) {
-                $data .= "&customParameters[3DS2_enrolled]=true";
-                
-                // Optional: specify flow type (challenge or frictionless)
-                $flowType = env('3DS_TEST_FLOW', 'challenge'); // 'challenge' or 'frictionless'
-                $data .= "&customParameters[3DS2_flow]={$flowType}";
-                
-                // Optional: force challenge flow with challengeIndicator
-                if ($flowType === 'challenge') {
-                    $data .= "&threeDSecure.challengeIndicator=04";
-                }
-                
-                Log::info('3D Secure test parameters added to checkout', [
-                    'order_id' => $order->id,
-                    'flow_type' => $flowType
-                ]);
-            }
 
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, $url);
