@@ -20,7 +20,7 @@ class PaymentController extends Controller
         try {
             // Log the start of the process with OPPWA config
             $environment = config('oppwa.environment', 'test');
-            $envKey = $environment === 'prod' ? 'production' : 'test';
+            $envKey = $environment === 'production' ? 'production' : 'test';
             
             Log::info('Starting OPPWA webhook processing with configuration', [
                 'environment_config' => $environment,
@@ -85,15 +85,16 @@ class PaymentController extends Controller
             if ($decryptedData === false) {
                 Log::warning('Primary key failed, trying fallback key');
                 
-                $currentEnv = config('oppwa.environment', 'test');
-                $fallbackEnvKey = $currentEnv === 'prod' ? 'test' : 'production';
+                $currentEnv = config('oppwa.environment', 'production');
+                $fallbackEnvKey = $currentEnv === 'production' ? 'test' : 'production';
                 $fallbackKey = config("oppwa.{$fallbackEnvKey}.webhook_key");
                 
                 if ($fallbackKey && $fallbackKey !== $key_from_configuration) {
                     Log::info('Attempting decryption with fallback key', [
                         'current_env' => $currentEnv,
                         'fallback_env' => $fallbackEnvKey,
-                        'fallback_key_set' => 'YES'
+                        'fallback_key_set' => 'YES',
+                        'fallback_key_preview' => substr($fallbackKey, 0, 8) . '...'
                     ]);
                     
                     $fallbackKeyBin = hex2bin($fallbackKey);
@@ -104,7 +105,11 @@ class PaymentController extends Controller
                             'configured_env' => $currentEnv,
                             'working_env' => $fallbackEnvKey
                         ]);
+                    } else {
+                        Log::error('Fallback key also failed');
                     }
+                } else {
+                    Log::info('No fallback key available or same as primary key');
                 }
             }
 
@@ -123,7 +128,13 @@ class PaymentController extends Controller
                         'auth_tag_length_correct' => strlen($auth_tag) === 16,
                         'cipher_text_not_empty' => strlen($cipher_text) > 0
                     ],
-                    'tried_fallback' => isset($fallbackKey) ? 'YES' : 'NO'
+                    'tried_fallback' => isset($fallbackKey) ? 'YES' : 'NO',
+                    'debug_info' => [
+                        'iv_hex' => $iv_from_http_header,
+                        'auth_tag_hex' => $auth_tag_from_http_header,
+                        'body_first_100_chars' => substr($http_body, 0, 100),
+                        'both_keys_tried' => isset($fallbackKey) && $fallbackKey !== $key_from_configuration ? 'YES' : 'NO'
+                    ]
                 ]);
                 
                 throw new \RuntimeException($error);
@@ -206,7 +217,7 @@ class PaymentController extends Controller
 
             // Get OPPWA configuration from config file
             $environment = config('oppwa.environment', 'test'); // 'test' or 'prod'
-            $envKey = $environment === 'prod' ? 'production' : 'test';
+            $envKey = $environment === 'production' ? 'production' : 'test';
             
             $baseUrl = config("oppwa.{$envKey}.base_url");
             $entityId = config("oppwa.{$envKey}.entity_id");
