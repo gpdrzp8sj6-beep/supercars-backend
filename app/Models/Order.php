@@ -75,7 +75,8 @@ class Order extends Model
                 $newStatus = $order->status;
                 
                 // Send payment confirmation email when payment is resolved (completed or failed)
-                if ($original !== $newStatus && in_array($newStatus, ['completed', 'failed'])) {
+                // But only if NOT triggered from webhook (webhook will handle email manually)
+                if ($original !== $newStatus && in_array($newStatus, ['completed', 'failed']) && !app()->bound('webhook_processing')) {
                     try {
                         $email = $order->user?->email;
                         if ($email) {
@@ -90,7 +91,7 @@ class Order extends Model
                                 $numbers = json_decode($giveaway->pivot->numbers ?? '[]', true);
                                 $ticketInfo[] = "Giveaway {$giveaway->id}: " . implode(', ', $numbers);
                             }
-                            Log::info('Sending payment confirmation email', [
+                            Log::info('Sending payment confirmation email from model', [
                                 'order_id' => $order->id,
                                 'user_email' => $email,
                                 'payment_status' => $newStatus,
@@ -100,7 +101,7 @@ class Order extends Model
                             ]);
                             
                             Mail::to($email)->send(new OrderCompleted($order));
-                            Log::info('Payment confirmation email sent successfully.', [
+                            Log::info('Payment confirmation email sent successfully from model.', [
                                 'order_id' => $order->id,
                                 'status' => $newStatus
                             ]);
@@ -111,7 +112,7 @@ class Order extends Model
                             ]);
                         }
                     } catch (\Throwable $ex) {
-                        Log::error('Failed to send payment confirmation email: ' . $ex->getMessage(), [
+                        Log::error('Failed to send payment confirmation email from model: ' . $ex->getMessage(), [
                             'order_id' => $order->id,
                             'status' => $newStatus,
                             'exception' => $ex,

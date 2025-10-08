@@ -61,10 +61,18 @@
 
         @if($order->giveaways && $order->giveaways->count() > 0)
             {{-- DEBUG: Using giveaways relationship - this should show ticket numbers --}}
+            {{-- Giveaways count: {{ $order->giveaways->count() }} --}}
             @foreach($order->giveaways as $giveaway)
             @php
             $numbers = json_decode($giveaway->pivot->numbers ?? '[]', true);
             $quantity = $giveaway->pivot->amount ?? count($numbers);
+            Log::info('Email template giveaway data', [
+                'order_id' => $order->id,
+                'giveaway_id' => $giveaway->id,
+                'pivot_numbers' => $giveaway->pivot->numbers,
+                'decoded_numbers' => $numbers,
+                'quantity' => $quantity
+            ]);
             @endphp
 
             <div style="border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin: 10px 0; background: #f9f9f9;">
@@ -94,6 +102,7 @@
             @endforeach
         @else
             {{-- DEBUG: Fallback to cart data - this should NOT happen for completed orders --}}
+            {{-- No giveaways found, using cart data. Order status: {{ $order->status }} --}}
             @if($order->cart && is_array($order->cart))
                 @foreach($order->cart as $cartItem)
                 @php

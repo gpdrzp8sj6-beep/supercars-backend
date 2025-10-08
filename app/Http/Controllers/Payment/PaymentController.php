@@ -7,6 +7,9 @@ use Illuminate\Http\Request;
 use App\Models\Order;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
+use App\Mail\OrderCompleted;
 
 class PaymentController extends Controller
 {
@@ -247,17 +250,10 @@ class PaymentController extends Controller
             if ($previousStatus !== $status) {
                 $order->update(['status' => $status]);
                 
-                // Refresh the order to ensure the giveaways relationship is properly loaded for email
-                $order->refresh();
-                $order->load(['giveaways' => function($query) {
-                    $query->withPivot(['numbers', 'amount']);
-                }]);
-                
                 Log::info('Order status updated via webhook', [
                     'order_id' => $order->id,
                     'old_status' => $previousStatus,
                     'new_status' => $status,
-                    'giveaways_count' => $order->giveaways->count()
                 ]);
             } else {
                 Log::info('Order status unchanged via webhook', [
@@ -266,6 +262,66 @@ class PaymentController extends Controller
                 ]);
             }
         });
+        
+        // After transaction is committed, refresh the order and log the giveaways
+        if ($previousStatus !== $status) {
+            // Mark that we're processing a webhook to prevent double email sending
+            app()->singleton('webhook_processing', function () {
+                return true;
+            });
+            
+            $order->refresh();
+            $order->load(['giveaways' => function($query) {
+                $query->withPivot(['numbers', 'amount']);
+            }]);
+            
+            Log::info('Order refreshed after webhook transaction', [
+                'order_id' => $order->id,
+                'giveaways_count' => $order->giveaways->count(),
+                'first_giveaway_numbers' => $order->giveaways->first()?->pivot?->numbers
+            ]);
+            
+            // Send email manually after ensuring everything is properly set up
+            if (in_array($status, ['completed', 'failed'])) {
+                try {
+                    $email = $order->user?->email;
+                    if ($email) {
+                        // Log detailed giveaway information
+                        $ticketInfo = [];
+                        foreach ($order->giveaways as $giveaway) {
+                            $numbers = json_decode($giveaway->pivot->numbers ?? '[]', true);
+                            $ticketInfo[] = "Giveaway {$giveaway->id}: " . implode(', ', $numbers);
+                        }
+                        
+                        Log::info('Sending payment confirmation email from webhook', [
+                            'order_id' => $order->id,
+                            'user_email' => $email,
+                            'payment_status' => $status,
+                            'giveaways_count' => $order->giveaways->count(),
+                            'ticket_numbers' => $ticketInfo,
+                            'has_pivot_numbers' => $order->giveaways->first()?->pivot?->numbers ? 'yes' : 'no'
+                        ]);
+                        
+                        Mail::to($email)->send(new OrderCompleted($order));
+                        Log::info('Payment confirmation email sent successfully from webhook.', [
+                            'order_id' => $order->id,
+                            'status' => $status
+                        ]);
+                    } else {
+                        Log::warning('Payment status updated but user email missing.', [
+                            'order_id' => $order->id,
+                            'status' => $status
+                        ]);
+                    }
+                } catch (\Throwable $ex) {
+                    Log::error('Failed to send payment confirmation email from webhook: ' . $ex->getMessage(), [
+                        'order_id' => $order->id,
+                        'status' => $status,
+                        'exception' => $ex,
+                    ]);
+                }
+            }
+        }
     }
 
     private function determineOrderStatus(string $resultCode): string
@@ -322,6 +378,12 @@ class PaymentController extends Controller
         $user = $order->user;
         $giveaways = \App\Models\Giveaway::whereIn('id', collect($cart)->pluck('id'))->get()->keyBy('id');
 
+        Log::info('Starting ticket assignment', [
+            'order_id' => $order->id,
+            'cart_items' => count($cart),
+            'existing_giveaways' => $order->giveaways()->count()
+        ]);
+
         $attachData = [];
 
         foreach ($cart as $item) {
@@ -331,17 +393,36 @@ class PaymentController extends Controller
 
             $giveaway = $giveaways->get($giveawayId);
 
+            if (!$giveaway) {
+                Log::error("Giveaway not found for ID {$giveawayId} in order {$order->id}");
+                continue;
+            }
+
             // Enforce per-order limit
             if ($amount > $giveaway->ticketsPerUser) {
                 Log::error("Amount for giveaway ID {$giveawayId} exceeds ticketsPerUser limit for order {$order->id}");
                 continue;
             }
 
-            // Enforce cumulative per-user limit across previous completed orders
+            // Check if this giveaway is already attached to this order
+            $existingAttachment = $order->giveaways()->where('giveaway_id', $giveawayId)->first();
+            if ($existingAttachment && !empty($existingAttachment->pivot->numbers)) {
+                Log::info("Giveaway {$giveawayId} already has ticket numbers for order {$order->id}, skipping");
+                continue;
+            }
+
+            // Enforce per-order limit
+            if ($amount > $giveaway->ticketsPerUser) {
+                Log::error("Amount for giveaway ID {$giveawayId} exceeds ticketsPerUser limit for order {$order->id}");
+                continue;
+            }
+
+            // Enforce cumulative per-user limit across previous completed orders (exclude current order)
             $existingUserNumbers = DB::table('giveaway_order')
                 ->join('orders', 'giveaway_order.order_id', '=', 'orders.id')
                 ->where('orders.user_id', $user->id)
                 ->where('orders.status', 'completed')
+                ->where('orders.id', '!=', $order->id) // Exclude current order
                 ->where('giveaway_order.giveaway_id', $giveawayId)
                 ->pluck('giveaway_order.numbers')
                 ->filter()
@@ -370,13 +451,38 @@ class PaymentController extends Controller
         }
 
         // Sync the giveaways to the order (this will replace any existing attachments)
-        $order->giveaways()->sync($attachData);
-        
-        Log::info('Tickets assigned for order', [
-            'order_id' => $order->id,
-            'attach_data' => $attachData,
-            'total_giveaways' => count($attachData)
-        ]);
+        try {
+            $order->giveaways()->sync($attachData);
+            Log::info('Tickets assigned for order', [
+                'order_id' => $order->id,
+                'attach_data' => $attachData,
+                'total_giveaways' => count($attachData)
+            ]);
+        } catch (\Exception $e) {
+            // Fallback: If amount column doesn't exist, try without amount
+            if (str_contains($e->getMessage(), 'amount')) {
+                Log::warning('Amount column error, retrying without amount field', [
+                    'order_id' => $order->id,
+                    'error' => $e->getMessage()
+                ]);
+                
+                $fallbackData = [];
+                foreach ($attachData as $giveawayId => $data) {
+                    $fallbackData[$giveawayId] = [
+                        'numbers' => $data['numbers']
+                    ];
+                }
+                
+                $order->giveaways()->sync($fallbackData);
+                Log::info('Tickets assigned for order (without amount)', [
+                    'order_id' => $order->id,
+                    'attach_data' => $fallbackData,
+                    'total_giveaways' => count($fallbackData)
+                ]);
+            } else {
+                throw $e; // Re-throw if it's a different error
+            }
+        }
     }
 
     private function getAvailableNumbers($giveaway, $amount, $requestedNumbers = [])
