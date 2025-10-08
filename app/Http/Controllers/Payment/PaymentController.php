@@ -234,7 +234,9 @@ class PaymentController extends Controller
                 'bearer_token_preview' => $bearerToken ? substr($bearerToken, 0, 12) . '...' : 'NONE',
                 'currency' => config('oppwa.payment.currency', 'GBP'),
                 'payment_type' => config('oppwa.payment.payment_type', 'DB'),
-                'amount' => $amount
+                'amount' => $amount,
+                'order_id' => $order->id,
+                'merchant_transaction_id' => $order->id
             ]);
             
             $url = "{$baseUrl}/v1/checkouts";
@@ -242,6 +244,7 @@ class PaymentController extends Controller
                         "&amount=" . $amount .
                         "&currency=" . config('oppwa.payment.currency', 'GBP') .
                         "&paymentType=" . config('oppwa.payment.payment_type', 'DB') .
+                        "&merchantTransactionId=" . $order->id .
                         "&customer.email=" . $user->email .
                         "&customer.givenName=" . $user->forenames;
 
