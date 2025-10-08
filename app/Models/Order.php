@@ -112,7 +112,7 @@ class Order extends Model
     public function giveaways(): BelongsToMany
     {
         return $this->belongsToMany(Giveaway::class)
-                    ->withPivot('numbers')
+                    ->withPivot('numbers', 'amount')
                     ->withTimestamps();
     }
 
