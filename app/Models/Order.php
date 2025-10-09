@@ -100,7 +100,7 @@ class Order extends Model
                                 'has_pivot_numbers' => $order->giveaways->first()?->pivot?->numbers ? 'yes' : 'no'
                             ]);
                             
-                            // Mail::to($email)->send(new OrderCompleted($order));
+                            Mail::to($email)->send(new OrderCompleted($order));
                             Log::info('Payment confirmation email sent successfully from model.', [
                                 'order_id' => $order->id,
                                 'status' => $newStatus
