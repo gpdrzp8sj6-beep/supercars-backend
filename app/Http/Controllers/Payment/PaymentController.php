@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Cache;
 use App\Mail\OrderCompleted;
 
 class PaymentController extends Controller
@@ -296,6 +297,23 @@ class PaymentController extends Controller
             return;
         }
 
+        // Create unique webhook identifier to prevent duplicate processing
+        $webhookId = $checkoutId . '_' . $resultCode;
+        $cacheKey = 'webhook_processed_' . $webhookId;
+
+        // Check if this webhook was already processed recently (within last 5 minutes)
+        if (Cache::has($cacheKey)) {
+            Log::info('Duplicate webhook detected, skipping processing', [
+                'checkout_id' => $checkoutId,
+                'result_code' => $resultCode,
+                'webhook_id' => $webhookId
+            ]);
+            return;
+        }
+
+        // Mark this webhook as processed
+        Cache::put($cacheKey, true, 300); // 5 minutes
+
         // Find the order by checkoutId
         $order = Order::where('checkoutId', $checkoutId)->first();
 
@@ -308,16 +326,22 @@ class PaymentController extends Controller
         }
 
         // Determine order status based on result code
-        $status = $this->determineOrderStatus($resultCode);
+        $status = $this->determineOrderStatus($resultCode, $payload);
         $previousStatus = $order->status;
 
         Log::info('Processing webhook for order', [
             'order_id' => $order->id,
             'checkout_id' => $checkoutId,
             'result_code' => $resultCode,
+            'result_description' => $payload['result']['description'] ?? 'unknown',
+            'payment_type' => $payload['paymentType'] ?? 'unknown',
+            'payment_brand' => $payload['paymentBrand'] ?? 'unknown',
+            'amount' => $payload['amount'] ?? 'unknown',
+            'currency' => $payload['currency'] ?? 'unknown',
             'previous_status' => $previousStatus,
             'determined_status' => $status,
-            'status_changed' => $previousStatus !== $status
+            'status_changed' => $previousStatus !== $status,
+            'webhook_payload_keys' => array_keys($payload)
         ]);
 
         // Use database transaction to ensure atomicity
@@ -406,8 +430,31 @@ class PaymentController extends Controller
         }
     }
 
-    private function determineOrderStatus(string $resultCode): string
+    private function determineOrderStatus(string $resultCode, array $payload = []): string
     {
+        // Check for explicit hold indicators in the payload
+        $riskScore = $payload['risk']['score'] ?? null;
+        $threeDSecureStatus = $payload['threeDSecure']['eci'] ?? null;
+        $paymentStatus = $payload['paymentStatus'] ?? null;
+
+        // If payment status is explicitly set to 'HOLD' or similar
+        if ($paymentStatus && in_array(strtoupper($paymentStatus), ['HOLD', 'PENDING', 'REVIEW'])) {
+            Log::info("Payment explicitly marked as {$paymentStatus}", [
+                'result_code' => $resultCode,
+                'payment_status' => $paymentStatus
+            ]);
+            return 'pending';
+        }
+
+        // High risk score might indicate hold
+        if ($riskScore && $riskScore > 80) {
+            Log::info("Payment on hold due to high risk score", [
+                'result_code' => $resultCode,
+                'risk_score' => $riskScore
+            ]);
+            return 'pending';
+        }
+
         // Success codes - payment completed successfully
         if (preg_match('/^(000\.000\.|000\.100\.1|000\.[36]|000\.400\.[1][12]0)/', $resultCode)) {
             Log::info("Payment successful", ['result_code' => $resultCode]);
