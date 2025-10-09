@@ -36,7 +36,7 @@ return [
         'base_url' => 'https://eu-prod.oppwa.com',
         'entity_id' => '8ac9a4cd9662a1bc0196687d626128ad',
         'bearer_token' => 'OGFjOWE0Y2M5NjYyYWIxZDAxOTY2ODdkNjFhMjI5MzN8UWltamM6IWZIRVpBejMlcnBiZzY=',
-        'webhook_key' => env('OPPWA_PROD_WEBHOOK_KEY', 'E4666F48342B41B2FC9E3F989334E3DB2FED03B33A50D2783D8893366A88C663'), // Set this when you get production webhook key
+        'webhook_key' => env('OPPWA_PROD_WEBHOOK_KEY', 'F323027DADB260FC1BBBBE0182DA35BDA6E5205B51CB33AE4C270DF5E0404D56'), // Set this when you get production webhook key
         'webhook_endpoint' => 'https://api.jonnyfromdonnycompetitions.co.uk/v1/oppwa/webhook',
     ],
 
