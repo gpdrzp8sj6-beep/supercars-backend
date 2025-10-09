@@ -322,6 +322,11 @@ class PaymentController extends Controller
 
         // Use database transaction to ensure atomicity
         DB::transaction(function () use ($order, $status, $previousStatus) {
+            // Mark that we're processing a webhook BEFORE any updates to prevent double email sending
+            app()->singleton('webhook_processing', function () {
+                return true;
+            });
+            
             // For completed orders, assign tickets before updating status
             if ($status === 'completed') {
                 $this->assignTicketsForOrder($order);
@@ -347,11 +352,6 @@ class PaymentController extends Controller
         
         // After transaction is committed, refresh the order and log the giveaways
         if ($previousStatus !== $status) {
-            // Mark that we're processing a webhook to prevent double email sending
-            app()->singleton('webhook_processing', function () {
-                return true;
-            });
-            
             $order->refresh();
             $order->load(['giveaways' => function($query) {
                 $query->withPivot(['numbers', 'amount']);
