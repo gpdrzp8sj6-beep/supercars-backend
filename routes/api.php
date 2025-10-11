@@ -18,6 +18,7 @@ Route::prefix('giveaways')->group(function () {
     Route::get('just-launched', [GiveawaysController::class, 'getJustLaunched']);
     Route::get('winners', [GiveawaysController::class, 'getWinners']);
     Route::get('{id}', [GiveawaysController::class, 'index']);
+    Route::get('{id}/orders', [GiveawaysController::class, 'getOrders']);
     Route::post('{id}/check-tickets', [GiveawaysController::class, 'checkTicketAvailability']);
 });
 
@@ -26,6 +27,9 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/', [OrdersController::class, 'store']);
         Route::get('/', [OrdersController::class, 'index']);
     });
+
+    // User giveaway entries
+    Route::get('giveaways/{id}/my-entries', [GiveawaysController::class, 'getUserEntries']);
 
     Route::prefix('payment')->group(function () {
         Route::get('/', [PaymentController::class, 'generateCheckout']);

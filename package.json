@@ -7,7 +7,17 @@
         "dev": "vite",
         "format": "prettier --write resources/",
         "format:check": "prettier --check resources/",
-        "lint": "eslint . --fix"
+        "lint": "eslint . --fix",
+        "build-RecentOrders": "cd nova-components/RecentOrders && npm run dev",
+        "build-RecentOrders-prod": "cd nova-components/RecentOrders && npm run prod",
+        "build-recent-orders": "cd nova-components/RecentOrders && npm run dev",
+        "build-recent-orders-prod": "cd nova-components/RecentOrders && npm run prod",
+        "build-recentorders": "cd nova-components/Recentorders && npm run dev",
+        "build-recentorders-prod": "cd nova-components/Recentorders && npm run prod",
+        "build-order-analytics": "cd nova-components/OrderAnalytics && npm run dev",
+        "build-order-analytics-prod": "cd nova-components/OrderAnalytics && npm run prod",
+        "build-revenue-analytics": "cd nova-components/RevenueAnalytics && npm run dev",
+        "build-revenue-analytics-prod": "cd nova-components/RevenueAnalytics && npm run prod"
     },
     "devDependencies": {
         "@eslint/js": "^9.19.0",
@@ -27,6 +37,7 @@
         "@tailwindcss/vite": "^4.1.1",
         "@vitejs/plugin-vue": "^5.2.1",
         "@vueuse/core": "^12.8.2",
+        "chart.js": "^4.5.0",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "concurrently": "^9.0.1",
