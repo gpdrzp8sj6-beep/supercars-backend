@@ -10,7 +10,7 @@ use Laravel\Nova\Fields\Select;
 use Laravel\Nova\Fields\Text;
 use Laravel\Nova\Fields\DateTime;
 use Laravel\Nova\Fields\Currency;
-use Laravel\Nova\Fields\BelongsToMany;
+use Laravel\Nova\Fields\Badge;
 use Laravel\Nova\Http\Requests\NovaRequest;
 
 class Order extends Resource
@@ -66,6 +66,21 @@ class Order extends Resource
                     'failed' => 'Failed',
                 ]),
             Currency::make("Total"),
+            Currency::make("Credit Used", 'credit_used'),
+            Text::make("Checkout ID", 'checkoutId')->hideFromIndex(),
+            Badge::make('Payment Method', function () {
+                if ($this->credit_used > 0) {
+                    return $this->checkoutId ? 'Mixed (Credit + Payment)' : 'Credit Only';
+                } elseif ($this->checkoutId) {
+                    return 'Payment Gateway';
+                }
+                return 'Unknown';
+            })->map([
+                'Credit Only' => 'success',
+                'Payment Gateway' => 'info',
+                'Mixed (Credit + Payment)' => 'warning',
+                'Unknown' => 'danger',
+            ]),
             Text::make("Forenames")->hideFromIndex(),
             Text::make("Surname")->hideFromIndex(),
             Text::make("Phone"),
