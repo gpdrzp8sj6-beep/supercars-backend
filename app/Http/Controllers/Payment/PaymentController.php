@@ -298,7 +298,7 @@ class PaymentController extends Controller
         }
 
         // Create unique webhook identifier to prevent duplicate processing
-        $webhookId = $checkoutId . '_' . $resultCode;
+        $webhookId = $checkoutId; // Use only checkoutId for duplicate prevention
         $cacheKey = 'webhook_processed_' . $webhookId;
 
         // Check if this webhook was already processed recently (within last 5 minutes)
@@ -326,8 +326,20 @@ class PaymentController extends Controller
         }
 
         // Determine order status based on result code
-        $status = $this->determineOrderStatus($resultCode, $payload);
-        $previousStatus = $order->status;
+        $newStatus = $this->determineOrderStatus($resultCode, $payload);
+        $currentStatus = $order->status;
+
+        // Validate status transition
+        if (!$this->isValidStatusTransition($currentStatus, $newStatus)) {
+            Log::info('Invalid status transition, skipping webhook processing', [
+                'order_id' => $order->id,
+                'checkout_id' => $checkoutId,
+                'current_status' => $currentStatus,
+                'new_status' => $newStatus,
+                'result_code' => $resultCode
+            ]);
+            return;
+        }
 
         Log::info('Processing webhook for order', [
             'order_id' => $order->id,
@@ -338,44 +350,42 @@ class PaymentController extends Controller
             'payment_brand' => $payload['paymentBrand'] ?? 'unknown',
             'amount' => $payload['amount'] ?? 'unknown',
             'currency' => $payload['currency'] ?? 'unknown',
-            'previous_status' => $previousStatus,
-            'determined_status' => $status,
-            'status_changed' => $previousStatus !== $status,
+            'current_status' => $currentStatus,
+            'new_status' => $newStatus,
+            'status_changed' => $currentStatus !== $newStatus,
             'webhook_payload_keys' => array_keys($payload)
         ]);
 
         // Use database transaction to ensure atomicity
-        DB::transaction(function () use ($order, $status, $previousStatus) {
+        DB::transaction(function () use ($order, $newStatus, $currentStatus) {
             // Mark that we're processing a webhook BEFORE any updates to prevent double email sending
             app()->singleton('webhook_processing', function () {
                 return true;
             });
             
-            // For completed orders, assign tickets before updating status
-            if ($status === 'completed') {
+            // Handle ticket assignment/revocation based on status transition
+            if ($newStatus === 'completed' && $currentStatus !== 'completed') {
+                // Status changing TO completed - assign tickets
                 $this->assignTicketsForOrder($order);
                 Log::info('Tickets assigned for order via webhook', ['order_id' => $order->id]);
+            } elseif ($newStatus === 'failed' && $currentStatus === 'completed') {
+                // Status changing FROM completed TO failed - revoke tickets
+                $this->revokeTicketsForOrder($order);
+                Log::info('Tickets revoked for failed order via webhook', ['order_id' => $order->id]);
             }
 
-            // Update order status only if it has changed
-            if ($previousStatus !== $status) {
-                $order->update(['status' => $status]);
-                
-                Log::info('Order status updated via webhook', [
-                    'order_id' => $order->id,
-                    'old_status' => $previousStatus,
-                    'new_status' => $status,
-                ]);
-            } else {
-                Log::info('Order status unchanged via webhook', [
-                    'order_id' => $order->id,
-                    'status' => $status
-                ]);
-            }
+            // Update order status
+            $order->update(['status' => $newStatus]);
+            
+            Log::info('Order status updated via webhook', [
+                'order_id' => $order->id,
+                'old_status' => $currentStatus,
+                'new_status' => $newStatus,
+            ]);
         });
         
         // After transaction is committed, refresh the order and log the giveaways
-        if ($previousStatus !== $status) {
+        if ($currentStatus !== $newStatus) {
             $order->refresh();
             $order->load(['giveaways' => function($query) {
                 $query->withPivot(['numbers', 'amount']);
@@ -388,7 +398,7 @@ class PaymentController extends Controller
             ]);
             
             // Send email manually after ensuring everything is properly set up
-            if (in_array($status, ['completed', 'failed'])) {
+            if (in_array($newStatus, ['completed', 'failed'])) {
                 try {
                     $email = $order->user?->email;
                     if ($email) {
@@ -402,7 +412,7 @@ class PaymentController extends Controller
                         Log::info('Sending payment confirmation email from webhook', [
                             'order_id' => $order->id,
                             'user_email' => $email,
-                            'payment_status' => $status,
+                            'payment_status' => $newStatus,
                             'giveaways_count' => $order->giveaways->count(),
                             'ticket_numbers' => $ticketInfo,
                             'has_pivot_numbers' => $order->giveaways->first()?->pivot?->numbers ? 'yes' : 'no'
@@ -411,23 +421,46 @@ class PaymentController extends Controller
                         Mail::to($email)->send(new OrderCompleted($order));
                         Log::info('Payment confirmation email sent successfully from webhook.', [
                             'order_id' => $order->id,
-                            'status' => $status
+                            'status' => $newStatus
                         ]);
                     } else {
                         Log::warning('Payment status updated but user email missing.', [
                             'order_id' => $order->id,
-                            'status' => $status
+                            'status' => $newStatus
                         ]);
                     }
                 } catch (\Throwable $ex) {
                     Log::error('Failed to send payment confirmation email from webhook: ' . $ex->getMessage(), [
                         'order_id' => $order->id,
-                        'status' => $status,
+                        'status' => $newStatus,
                         'exception' => $ex,
                     ]);
                 }
             }
         }
+    }
+
+    private function isValidStatusTransition(string $currentStatus, string $newStatus): bool
+    {
+        // Define valid status transitions
+        $validTransitions = [
+            'pending' => ['completed', 'failed'],
+            'completed' => ['failed'], // Allow completed -> failed for chargebacks/refunds
+            'failed' => [] // Failed is terminal, no transitions allowed
+        ];
+
+        return in_array($newStatus, $validTransitions[$currentStatus] ?? []);
+    }
+
+    private function revokeTicketsForOrder(Order $order): void
+    {
+        // Remove ticket assignments for this order
+        $order->giveaways()->detach();
+        
+        Log::info('Tickets revoked for order', [
+            'order_id' => $order->id,
+            'giveaways_detached' => true
+        ]);
     }
 
     private function determineOrderStatus(string $resultCode, array $payload = []): string
