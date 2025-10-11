@@ -12,7 +12,7 @@
             <div class="text-sm text-gray-500">{{ formatDate(order.created_at) }}</div>
           </div>
           <div class="text-right">
-            <div class="font-medium">${{ order.total }}</div>
+            <div class="font-medium">£{{ order.total }}</div>
             <div class="text-sm" :class="statusColor(order.status)">{{ order.status }}</div>
           </div>
         </div>

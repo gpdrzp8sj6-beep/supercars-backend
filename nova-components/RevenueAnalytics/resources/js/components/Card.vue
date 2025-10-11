@@ -14,7 +14,7 @@
                   :style="{ width: barWidth(item.revenue) }"
                 ></div>
                 <div class="absolute inset-0 flex items-center justify-center text-xs font-medium text-gray-700">
-                  ${{ formatCurrency(item.revenue) }}
+                  £{{ formatCurrency(item.revenue) }}
                 </div>
               </div>
             </div>
@@ -24,7 +24,7 @@
 
       <div class="mt-4 pt-3 border-t border-gray-200">
         <div class="text-sm text-gray-600">
-          Total revenue: <span class="font-semibold text-green-600">${{ formatCurrency(totalRevenue) }}</span>
+          Total revenue: <span class="font-semibold text-green-600">£{{ formatCurrency(totalRevenue) }}</span>
         </div>
       </div>
     </div>
