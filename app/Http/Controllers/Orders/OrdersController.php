@@ -55,8 +55,23 @@ class OrdersController extends Controller
             ]);
         }
 
-        shuffle($availableNumbers);
-        return array_slice($availableNumbers, 0, $amount);
+        // Use array_rand for better random selection
+        $randomKeys = array_rand($availableNumbers, $amount);
+
+        // Handle case where array_rand returns a single key when amount = 1
+        if (!is_array($randomKeys)) {
+            $randomKeys = [$randomKeys];
+        }
+
+        $selectedNumbers = [];
+        foreach ($randomKeys as $key) {
+            $selectedNumbers[] = $availableNumbers[$key];
+        }
+
+        // Sort the numbers for consistency (optional, but makes them appear in order)
+        sort($selectedNumbers);
+
+        return $selectedNumbers;
     }
 
     public function store(Request $request): JsonResponse
@@ -245,6 +260,35 @@ class OrdersController extends Controller
             return response()->json([
                 'message' => 'Failed to create order',
             ], 500);
+        }
+
+        // Send OrderCompleted email for credit-only payments (since they start as completed)
+        if ($order->status === 'completed' && $order->total == 0 && $order->credit_used > 0) {
+            try {
+                $email = $order->user?->email;
+                if ($email) {
+                    // Ensure giveaways relationship is loaded with pivot data for email
+                    $order->load(['giveaways' => function($query) {
+                        $query->withPivot(['numbers', 'amount']);
+                    }]);
+
+                    Mail::to($email)->send(new OrderCompleted($order));
+                    Log::info('Order completed email sent for credit-only payment.', [
+                        'order_id' => $order->id,
+                        'user_email' => $email,
+                        'credit_used' => $order->credit_used
+                    ]);
+                } else {
+                    Log::warning('Credit-only order completed but user email missing.', [
+                        'order_id' => $order->id
+                    ]);
+                }
+            } catch (\Throwable $ex) {
+                Log::error('Failed to send order completed email for credit payment: ' . $ex->getMessage(), [
+                    'order_id' => $order->id,
+                    'exception' => $ex,
+                ]);
+            }
         }
 
         // Auto-save address to user's address book if it's new
