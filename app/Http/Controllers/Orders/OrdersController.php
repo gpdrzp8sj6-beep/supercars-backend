@@ -30,6 +30,7 @@ class OrdersController extends Controller
             ->join('orders', 'giveaway_order.order_id', '=', 'orders.id')
             ->where('giveaway_order.giveaway_id', $giveawayId)
             ->where('orders.status', 'completed')
+            ->orderBy('giveaway_order.id')
             ->pluck('giveaway_order.numbers')
             ->filter()
             ->flatMap(function ($jsonNumbers) {
@@ -59,18 +60,9 @@ class OrdersController extends Controller
             ]);
         }
 
-        // Use array_rand for better random selection
-        $randomKeys = array_rand($availableNumbers, $amount);
-
-        // Handle case where array_rand returns a single key when amount = 1
-        if (!is_array($randomKeys)) {
-            $randomKeys = [$randomKeys];
-        }
-
-        $selectedNumbers = [];
-        foreach ($randomKeys as $key) {
-            $selectedNumbers[] = $availableNumbers[$key];
-        }
+        // Shuffle and select random numbers
+        shuffle($availableNumbers);
+        $selectedNumbers = array_slice($availableNumbers, 0, $amount);
 
         // Sort the numbers for consistency (optional, but makes them appear in order)
         sort($selectedNumbers);
@@ -174,6 +166,7 @@ class OrdersController extends Controller
                         ->where('orders.user_id', $user->id)
                         ->where('orders.status', 'completed')
                         ->where('giveaway_order.giveaway_id', $giveawayId)
+                        ->orderBy('giveaway_order.id')
                         ->pluck('giveaway_order.numbers')
                         ->filter()
                         ->flatMap(function ($jsonNumbers) {
@@ -256,7 +249,7 @@ class OrdersController extends Controller
 
                 $order->giveaways()->attach($attachData);
             }
-        });
+        }, 3);
 
         // Safety: ensure order was created
         if (!$order) {

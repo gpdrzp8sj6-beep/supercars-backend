@@ -245,18 +245,9 @@ class ValidateCheckouts extends Command
             throw new \Exception('Not enough tickets available to assign requested amount.');
         }
 
-        // Use array_rand for better random selection
-        $randomKeys = array_rand($availableNumbers, $amount);
-
-        // Handle case where array_rand returns a single key when amount = 1
-        if (!is_array($randomKeys)) {
-            $randomKeys = [$randomKeys];
-        }
-
-        $selectedNumbers = [];
-        foreach ($randomKeys as $key) {
-            $selectedNumbers[] = $availableNumbers[$key];
-        }
+        // Shuffle and select random numbers
+        shuffle($availableNumbers);
+        $selectedNumbers = array_slice($availableNumbers, 0, $amount);
 
         // Sort the numbers for consistency (optional, but makes them appear in order)
         sort($selectedNumbers);
