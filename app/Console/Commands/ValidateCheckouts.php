@@ -29,8 +29,8 @@ class ValidateCheckouts extends Command
                 return;
             }
 
-            // Check for 30-minute timeout for order payment
-            if ($order->created_at->lt(Carbon::now()->subMinutes(30))) {
+            // Check for 24-hour timeout for order payment
+            if ($order->created_at->lt(Carbon::now()->subHours(24))) {
                 $order->update(['status' => 'failed']);
                 // Clean up any giveaway_order records for failed orders
                 DB::table('giveaway_order')->where('order_id', $order->id)->delete();
@@ -237,6 +237,10 @@ class ValidateCheckouts extends Command
             }
         }
 
+        if ($amount <= 0) {
+            return [];
+        }
+
         if (count($availableNumbers) < $amount) {
             throw new \Exception('Not enough tickets available to assign requested amount.');
         }
@@ -274,7 +278,7 @@ class ValidateCheckouts extends Command
             return 'pending';
         }
 
-        // Handle timeout/session expired errors - treat as completed if order is older than 30 minutes
+        // Handle timeout/session expired errors - treat as completed if order is older than 24 hours
         if (preg_match('/^(200\.300\.404)/', $code)) {
             Log::warning("Payment session expired for checkout validation", ['code' => $code]);
             return 'completed'; // Assume payment went through if session expired

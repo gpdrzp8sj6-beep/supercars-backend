@@ -49,6 +49,10 @@ class OrdersController extends Controller
             }
         }
 
+        if ($amount <= 0) {
+            return [];
+        }
+
         if (count($availableNumbers) < $amount) {
             throw ValidationException::withMessages([
                 'tickets' => ['Not enough tickets available to assign requested amount.'],
