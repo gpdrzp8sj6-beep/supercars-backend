@@ -207,6 +207,18 @@ class PaymentController extends Controller
 
             $amount = $request->amount;
 
+            // Validate that the requested amount matches the order total
+            if ((float)$amount !== (float)$order->total) {
+                Log::error('Amount mismatch in createCheckout', [
+                    'order_id' => $order->id,
+                    'request_amount' => $amount,
+                    'order_total' => $order->total,
+                ]);
+                return response()->json([
+                    'message' => 'Payment amount does not match order total',
+                ], 400);
+            }
+
             // For zero-amount orders, no checkout is required
             if ((float)$amount === 0.0 || (float)($order->total ?? 0) === 0.0) {
                 return response()->json([

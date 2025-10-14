@@ -65,7 +65,8 @@ class Order extends Resource
                     'cancelled' => 'Cancelled',
                     'failed' => 'Failed',
                 ]),
-            Currency::make("Total")->currency('GBP'),
+            Currency::make("Subtotal", 'original_total')->currency('GBP'),
+            Currency::make("Amount Paid", 'total')->currency('GBP'),
             Currency::make("Credit Used", 'credit_used')->currency('GBP'),
             Text::make("Checkout ID", 'checkoutId')->hideFromIndex(),
             Badge::make('Payment Method', function () {

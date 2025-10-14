@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
 use App\Mail\OrderCompleted;
 use App\Mail\OrderReceived;
+use App\Models\CreditTransaction;
 
 class Order extends Model
 {
@@ -73,6 +74,25 @@ class Order extends Model
             if ($order->wasChanged('status')) {
                 $original = $order->getOriginal('status');
                 $newStatus = $order->status;
+                
+                // Refund credits if order fails and credits were used
+                if ($newStatus === 'failed' && $order->credit_used > 0) {
+                    $order->user->credit += $order->credit_used;
+                    $order->user->save();
+                    
+                    CreditTransaction::create([
+                        'user_id' => $order->user_id,
+                        'amount' => $order->credit_used,
+                        'type' => 'add',
+                        'description' => 'Refund for failed order ' . $order->id,
+                    ]);
+                    
+                    Log::info('Credits refunded for failed order', [
+                        'order_id' => $order->id,
+                        'amount' => $order->credit_used,
+                        'user_id' => $order->user_id
+                    ]);
+                }
                 
                 // Send payment confirmation email when payment is resolved (completed or failed)
                 // But only if NOT triggered from webhook (webhook will handle email manually)
