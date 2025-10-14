@@ -370,6 +370,20 @@ class PaymentController extends Controller
 
         // Use database transaction to ensure atomicity
         DB::transaction(function () use ($order, $newStatus, $currentStatus) {
+            // Lock the order to prevent concurrent updates
+            $lockedOrder = \App\Models\Order::where('id', $order->id)->lockForUpdate()->first();
+
+            if (!$lockedOrder) {
+                Log::warning("Order not found during webhook processing", ['order_id' => $order->id]);
+                return;
+            }
+
+            // Check if status is already the target status to avoid redundant updates
+            if ($lockedOrder->status === $newStatus) {
+                Log::info("Order status already {$newStatus}, skipping update", ['order_id' => $order->id]);
+                return;
+            }
+
             // Mark that we're processing a webhook BEFORE any updates to prevent double email sending
             app()->singleton('webhook_processing', function () {
                 return true;
@@ -378,23 +392,23 @@ class PaymentController extends Controller
             // Handle ticket assignment/revocation based on status transition
             if ($newStatus === 'completed' && $currentStatus !== 'completed') {
                 // Status changing TO completed - assign tickets
-                $this->assignTicketsForOrder($order);
+                $this->assignTicketsForOrder($lockedOrder);
                 Log::info('Tickets assigned for order via webhook', ['order_id' => $order->id]);
             } elseif ($newStatus === 'failed' && $currentStatus === 'completed') {
                 // Status changing FROM completed TO failed - revoke tickets
-                $this->revokeTicketsForOrder($order);
+                $this->revokeTicketsForOrder($lockedOrder);
                 Log::info('Tickets revoked for failed order via webhook', ['order_id' => $order->id]);
             }
 
             // Update order status
-            $order->update(['status' => $newStatus]);
+            $lockedOrder->update(['status' => $newStatus]);
             
             Log::info('Order status updated via webhook', [
                 'order_id' => $order->id,
                 'old_status' => $currentStatus,
                 'new_status' => $newStatus,
             ]);
-        });
+        }, 5);
         
         // After transaction is committed, refresh the order and log the giveaways
         if ($currentStatus !== $newStatus) {
@@ -598,6 +612,7 @@ class PaymentController extends Controller
                 ->where('orders.status', 'completed')
                 ->where('orders.id', '!=', $order->id) // Exclude current order
                 ->where('giveaway_order.giveaway_id', $giveawayId)
+                ->orderBy('giveaway_order.id')
                 ->pluck('giveaway_order.numbers')
                 ->filter()
                 ->flatMap(function ($jsonNumbers) {
@@ -664,6 +679,7 @@ class PaymentController extends Controller
         // Get all taken numbers for this giveaway
         $takenNumbers = DB::table('giveaway_order')
             ->where('giveaway_id', $giveaway->id)
+            ->orderBy('id')
             ->pluck('numbers')
             ->filter()
             ->flatMap(function ($jsonNumbers) {

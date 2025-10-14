@@ -72,20 +72,34 @@ class ValidateCheckouts extends Command
             
             // Use database transaction to ensure atomicity
             DB::transaction(function () use ($order, $status) {
+                // Lock the order to prevent concurrent updates
+                $lockedOrder = \App\Models\Order::where('id', $order->id)->lockForUpdate()->first();
+
+                if (!$lockedOrder) {
+                    $this->error("Order not found: {$order->id}");
+                    return;
+                }
+
+                // Check if status is already the target status
+                if ($lockedOrder->status === $status) {
+                    $this->info("Order {$order->id} already {$status}, skipping.");
+                    return;
+                }
+
                 // IMPORTANT: Assign tickets BEFORE updating status to avoid race condition
                 // This ensures tickets are assigned before the email is sent
                 if ($status === 'completed') {
-                    $this->assignTicketsForOrder($order);
+                    $this->assignTicketsForOrder($lockedOrder);
                     $this->info("Tickets assigned for order {$order->id}.");
                     
                     // Verify tickets were actually assigned
-                    $order->refresh();
-                    $assignedTickets = $order->giveaways->count();
+                    $lockedOrder->refresh();
+                    $assignedTickets = $lockedOrder->giveaways->count();
                     if ($assignedTickets > 0) {
                         $this->info("Verification: Order {$order->id} has {$assignedTickets} giveaway(s) with tickets assigned.");
                         
                         // Log ticket numbers for verification
-                        foreach ($order->giveaways as $giveaway) {
+                        foreach ($lockedOrder->giveaways as $giveaway) {
                             $numbers = json_decode($giveaway->pivot->numbers ?? '[]', true);
                             $this->info("Giveaway {$giveaway->id}: tickets " . implode(', ', $numbers));
                         }
@@ -94,9 +108,9 @@ class ValidateCheckouts extends Command
                     }
                 }
                 
-                $order->update(['status' => $status]);
+                $lockedOrder->update(['status' => $status]);
                 $this->info("Order {$order->id} updated to {$status}.");
-            });
+            }, 5);
 
             if ($status === 'completed') {
                 // Email will be sent automatically by Order model update hook
