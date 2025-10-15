@@ -16,6 +16,8 @@ use Laravel\Nova\Fields\Textarea;
 use Laravel\Nova\Http\Requests\NovaRequest;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\OrderCompleted;
 
 class ReassignTicketNumbers extends Action
 {
@@ -85,7 +87,7 @@ class ReassignTicketNumbers extends Action
 
         foreach ($models as $order) {
             try {
-                $this->reassignTicketsForOrder($order, $fields);
+                $this->reassignTicketsForOrder($order, $fields, $reassignmentType);
                 $processedOrders[] = "Order #{$order->id}";
             } catch (\Exception $e) {
                 // Return error message to user
@@ -265,7 +267,7 @@ class ReassignTicketNumbers extends Action
         ];
     }
 
-    private function reassignTicketsForOrder($order, $fields)
+    private function reassignTicketsForOrder($order, $fields, $reassignmentType)
     {
         $cart = $order->cart;
         if (!$cart || !is_array($cart)) {
@@ -346,6 +348,9 @@ class ReassignTicketNumbers extends Action
                     'order_id' => $order->id,
                     'attach_data' => $attachData
                 ]);
+
+                // Send updated ticket email to user
+                $this->sendTicketUpdateEmail($order, $reassignmentType);
             } catch (\Exception $e) {
                 throw new \Exception('Failed to save ticket assignments: ' . $e->getMessage());
             }
@@ -384,5 +389,52 @@ class ReassignTicketNumbers extends Action
         }
 
         return array_unique($unavailable);
+    }
+
+    private function sendTicketUpdateEmail($order, $reassignmentType)
+    {
+        try {
+            $email = $order->user?->email;
+            if (!$email) {
+                Log::warning('Cannot send ticket update email: user email missing', [
+                    'order_id' => $order->id
+                ]);
+                return;
+            }
+
+            // Refresh order with giveaway data
+            $order->load(['giveaways' => function($query) {
+                $query->withPivot(['numbers', 'amount']);
+            }]);
+
+            // Log detailed giveaway information
+            $ticketInfo = [];
+            foreach ($order->giveaways as $giveaway) {
+                $numbers = json_decode($giveaway->pivot->numbers ?? '[]', true);
+                $ticketInfo[] = "Giveaway {$giveaway->id}: " . implode(', ', $numbers);
+            }
+
+            Log::info('Sending ticket update email after reassignment', [
+                'order_id' => $order->id,
+                'user_email' => $email,
+                'reassignment_type' => $reassignmentType,
+                'giveaways_count' => $order->giveaways->count(),
+                'ticket_numbers' => $ticketInfo
+            ]);
+
+            Mail::to($email)->send(new OrderCompleted($order));
+
+            Log::info('Ticket update email sent successfully after reassignment', [
+                'order_id' => $order->id,
+                'reassignment_type' => $reassignmentType
+            ]);
+
+        } catch (\Throwable $ex) {
+            Log::error('Failed to send ticket update email after reassignment: ' . $ex->getMessage(), [
+                'order_id' => $order->id,
+                'reassignment_type' => $reassignmentType,
+                'exception' => $ex,
+            ]);
+        }
     }
 }
