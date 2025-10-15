@@ -563,12 +563,18 @@ class PaymentController extends Controller
             return;
         }
 
+        Log::info('Starting ticket assignment via webhook', [
+            'order_id' => $order->id,
+            'cart_data' => $cart,
+            'cart_item_count' => count($cart)
+        ]);
+
         $user = $order->user;
         $giveaways = \App\Models\Giveaway::whereIn('id', collect($cart)->pluck('id'))->get()->keyBy('id');
 
-        Log::info('Starting ticket assignment', [
+        Log::info('Ticket assignment details', [
             'order_id' => $order->id,
-            'cart_items' => count($cart),
+            'giveaways_loaded' => $giveaways->keys()->toArray(),
             'existing_giveaways' => $order->giveaways()->count()
         ]);
 
@@ -578,6 +584,14 @@ class PaymentController extends Controller
             $giveawayId = $item['id'];
             $amount = $item['amount'];
             $requestedNumbers = $item['numbers'] ?? [];
+
+            Log::info('Processing cart item in webhook assignment', [
+                'order_id' => $order->id,
+                'giveaway_id' => $giveawayId,
+                'amount' => $amount,
+                'requested_numbers_from_cart' => $requestedNumbers,
+                'has_numbers_in_cart' => isset($item['numbers']) && !empty($item['numbers'])
+            ]);
 
             $giveaway = $giveaways->get($giveawayId);
 
@@ -627,6 +641,16 @@ class PaymentController extends Controller
 
             // Get available numbers for this giveaway
             $availableNumbers = $this->getAvailableNumbers($giveaway, $amount, $requestedNumbers);
+
+            Log::info('Numbers assigned via webhook', [
+                'order_id' => $order->id,
+                'giveaway_id' => $giveawayId,
+                'requested_numbers' => $requestedNumbers,
+                'available_numbers_assigned' => $availableNumbers,
+                'amount_requested' => $amount,
+                'amount_assigned' => count($availableNumbers),
+                'assignment_successful' => count($availableNumbers) >= $amount
+            ]);
 
             if (count($availableNumbers) < $amount) {
                 Log::error("Not enough available numbers for giveaway ID {$giveawayId}, order {$order->id}");
@@ -711,11 +735,17 @@ class PaymentController extends Controller
 
         // Fill remaining slots with any available numbers
         $maxNumber = $giveaway->ticketsTotal;
-        for ($i = 1; $i <= $maxNumber && count($availableNumbers) < $amount; $i++) {
+        $allAvailable = [];
+        for ($i = 1; $i <= $maxNumber; $i++) {
             if (!in_array($i, $takenNumbers) && !in_array($i, $availableNumbers)) {
-                $availableNumbers[] = $i;
+                $allAvailable[] = $i;
             }
         }
+        // Shuffle to randomize the order
+        shuffle($allAvailable);
+        // Take the required amount
+        $remainingNeeded = $amount - count($availableNumbers);
+        $availableNumbers = array_merge($availableNumbers, array_slice($allAvailable, 0, $remainingNeeded));
 
         Log::info('Available numbers result', [
             'giveaway_id' => $giveaway->id,

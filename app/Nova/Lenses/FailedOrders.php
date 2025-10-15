@@ -1,8 +1,8 @@
 <?php
 
-namespace App\Nova;
+namespace App\Nova\Lenses;
 
-use Illuminate\Http\Request;
+use Illuminate\Database\Eloquent\Builder;
 use Laravel\Nova\Fields\ID;
 use Laravel\Nova\Fields\BelongsTo;
 use Laravel\Nova\Fields\HasOne;
@@ -11,53 +11,33 @@ use Laravel\Nova\Fields\Text;
 use Laravel\Nova\Fields\DateTime;
 use Laravel\Nova\Fields\Currency;
 use Laravel\Nova\Fields\Badge;
+use Laravel\Nova\Http\Requests\LensRequest;
 use Laravel\Nova\Http\Requests\NovaRequest;
+use Laravel\Nova\Lenses\Lens;
 
-class Order extends Resource
+class FailedOrders extends Lens
 {
     /**
-     * The model the resource corresponds to.
+     * Get the query builder / paginator for the lens.
      *
-     * @var class-string<\App\Models\Order>
+     * @param  \Laravel\Nova\Http\Requests\LensRequest  $request
+     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @return \Illuminate\Database\Eloquent\Builder
      */
-    public static $model = \App\Models\Order::class;
+    public static function query(LensRequest $request, $query)
+    {
+        return $request->withOrdering($request->withFilters(
+            $query->where('status', 'failed')->orderBy('created_at', 'desc')
+        ));
+    }
 
     /**
-     * The single value that should be used to represent the resource when being displayed.
+     * Get the fields available to the lens.
      *
-     * @var string
+     * @param  \Laravel\Nova\Http\Requests\NovaRequest  $request
+     * @return array
      */
-    public static $title = 'id';
-
-    /**
-     * The columns that should be searched.
-     *
-     * @var array
-     */
-    public static $search = [
-        'id',
-    ];
-
-    /**
-     * The relationships that should be eager loaded on index queries.
-     *
-     * @var array
-     */
-    public static $with = ['user', 'giveaways'];
-
-    /**
-     * Default ordering for index view.
-     *
-     * @var array
-     */
-    public static $orderBy = ['created_at' => 'desc'];
-
-    /**
-     * Get the fields displayed by the resource.
-     *
-     * @return array<int, \Laravel\Nova\Fields\Field>
-     */
-    public function fields(NovaRequest $request): array
+    public function fields(NovaRequest $request)
     {
         return [
             ID::make()->sortable(),
@@ -70,7 +50,6 @@ class Order extends Resource
                     return "<a href='{$giveawayUrl}' class='link-default' target='_blank'>Giveaway ID: {$giveaway->id}</a> - Tickets: {$tickets}";
                 })->implode('<br>');
             })->asHtml()->onlyOnDetail(),
-
 
             Select::make('Status')
                 ->options(fn () => [
@@ -110,46 +89,45 @@ class Order extends Resource
     }
 
     /**
-     * Get the cards available for the resource.
+     * Get the cards available on the lens.
      *
-     * @return array<int, \Laravel\Nova\Card>
+     * @param  \Laravel\Nova\Http\Requests\NovaRequest  $request
+     * @return array
      */
-    public function cards(NovaRequest $request): array
+    public function cards(NovaRequest $request)
     {
         return [];
     }
 
     /**
-     * Get the filters available for the resource.
+     * Get the filters available for the lens.
      *
-     * @return array<int, \Laravel\Nova\Filters\Filter>
+     * @param  \Laravel\Nova\Http\Requests\NovaRequest  $request
+     * @return array
      */
-    public function filters(NovaRequest $request): array
+    public function filters(NovaRequest $request)
     {
         return [];
     }
 
     /**
-     * Get the lenses available for the resource.
+     * Get the actions available on the lens.
      *
-     * @return array<int, \Laravel\Nova\Lenses\Lens>
+     * @param  \Laravel\Nova\Http\Requests\NovaRequest  $request
+     * @return array
      */
-    public function lenses(NovaRequest $request): array
+    public function actions(NovaRequest $request)
     {
-        return [
-            new \App\Nova\Lenses\FailedOrders,
-        ];
+        return [];
     }
 
     /**
-     * Get the actions available for the resource.
+     * Get the URI key for the lens.
      *
-     * @return array<int, \Laravel\Nova\Actions\Action>
+     * @return string
      */
-    public function actions(NovaRequest $request): array
+    public function uriKey()
     {
-        return [
-            new \App\Nova\Actions\ReassignTicketNumbers,
-        ];
+        return 'failed-orders';
     }
 }
