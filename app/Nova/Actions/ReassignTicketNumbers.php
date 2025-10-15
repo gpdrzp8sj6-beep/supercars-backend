@@ -391,6 +391,72 @@ class ReassignTicketNumbers extends Action
         return array_unique($unavailable);
     }
 
+    private function getAvailableNumbers($giveaway, $amount, $requestedNumbers = [], $excludeOrderId = null)
+    {
+        // Get all taken numbers for this giveaway, excluding the current order if specified
+        $query = DB::table('giveaway_order')
+            ->where('giveaway_id', $giveaway->id);
+
+        if ($excludeOrderId) {
+            $query->where('order_id', '!=', $excludeOrderId);
+        }
+
+        $takenNumbers = $query->orderBy('id')
+            ->pluck('numbers')
+            ->filter()
+            ->flatMap(function ($jsonNumbers) {
+                return json_decode($jsonNumbers, true) ?: [];
+            })
+            ->unique()
+            ->values()
+            ->toArray();
+
+        Log::info('Checking available numbers for giveaway in reassign action', [
+            'giveaway_id' => $giveaway->id,
+            'total_tickets' => $giveaway->ticketsTotal,
+            'amount_requested' => $amount,
+            'taken_numbers_count' => count($takenNumbers),
+            'taken_numbers' => $takenNumbers,
+            'requested_numbers' => $requestedNumbers,
+            'exclude_order_id' => $excludeOrderId
+        ]);
+
+        $availableNumbers = [];
+
+        // First, try to assign requested numbers if available
+        if (!empty($requestedNumbers)) {
+            foreach ($requestedNumbers as $number) {
+                if (!in_array($number, $takenNumbers) && count($availableNumbers) < $amount) {
+                    $availableNumbers[] = $number;
+                }
+            }
+        }
+
+        // Fill remaining slots with any available numbers
+        $maxNumber = $giveaway->ticketsTotal;
+        $allAvailable = [];
+        for ($i = 1; $i <= $maxNumber; $i++) {
+            if (!in_array($i, $takenNumbers) && !in_array($i, $availableNumbers)) {
+                $allAvailable[] = $i;
+            }
+        }
+        // Shuffle to randomize the order
+        shuffle($allAvailable);
+        // Take the required amount
+        $remainingNeeded = $amount - count($availableNumbers);
+        $availableNumbers = array_merge($availableNumbers, array_slice($allAvailable, 0, $remainingNeeded));
+
+        Log::info('Available numbers result in reassign action', [
+            'giveaway_id' => $giveaway->id,
+            'available_numbers' => $availableNumbers,
+            'available_count' => count($availableNumbers),
+            'needed_count' => $amount,
+            'success' => count($availableNumbers) >= $amount
+        ]);
+
+        return $availableNumbers;
+    }
+
     private function sendTicketUpdateEmail($order, $reassignmentType)
     {
         try {
