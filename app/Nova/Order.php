@@ -149,6 +149,7 @@ class Order extends Resource
     public function actions(NovaRequest $request): array
     {
         return [
+            new \App\Nova\Actions\CompleteOrder,
             new \App\Nova\Actions\ReassignTicketNumbers,
         ];
     }
