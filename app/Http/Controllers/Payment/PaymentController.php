@@ -341,23 +341,60 @@ class PaymentController extends Controller
                 'user_id' => $order->user_id
             ]);
 
-            // Only change status if payment was actually attempted (OPPWA redirected)
-            if ($order->status === 'created') {
-                DB::transaction(function () use ($order, $checkoutId) {
-                    $order->status = 'pending';
+            // Query OPPWA for actual payment status
+            $paymentStatus = $this->getPaymentStatusFromOPPWA($checkoutId);
+
+            if (!$paymentStatus) {
+                Log::error('Failed to get payment status from OPPWA', [
+                    'order_id' => $order->id,
+                    'checkout_id' => $checkoutId
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unable to verify payment status'
+                ], 500);
+            }
+
+            $resultCode = $paymentStatus['result']['code'];
+            $newStatus = $this->determineOrderStatus($resultCode, $paymentStatus);
+
+            Log::info('Payment status determined from OPPWA', [
+                'order_id' => $order->id,
+                'checkout_id' => $checkoutId,
+                'oppwa_result_code' => $resultCode,
+                'oppwa_result_description' => $paymentStatus['result']['description'] ?? 'unknown',
+                'determined_status' => $newStatus,
+                'current_order_status' => $order->status
+            ]);
+
+            // Only update if status would actually change
+            if ($order->status !== $newStatus) {
+                DB::transaction(function () use ($order, $newStatus, $checkoutId) {
+                    $oldStatus = $order->status;
+                    $order->status = $newStatus;
                     $order->save();
-                    // Assign tickets for the order
-                    $this->assignTicketsForOrder($order);
-                    Log::info('Order status changed to pending and tickets assigned', [
+
+                    // Only assign tickets if payment is completed
+                    if ($newStatus === 'completed') {
+                        $this->assignTicketsForOrder($order);
+                        Log::info('Tickets assigned for completed order', [
+                            'order_id' => $order->id,
+                            'checkout_id' => $checkoutId
+                        ]);
+                    }
+
+                    Log::info('Order status changed via handlePaymentResult', [
                         'order_id' => $order->id,
                         'checkout_id' => $checkoutId,
-                        'new_status' => $order->fresh()->status
+                        'from_status' => $oldStatus,
+                        'to_status' => $newStatus
                     ]);
                 });
             } else {
-                Log::info('Order status not changed - already processed', [
+                Log::info('Order status unchanged - no update needed', [
                     'order_id' => $order->id,
                     'current_status' => $order->status,
+                    'determined_status' => $newStatus,
                     'checkout_id' => $checkoutId
                 ]);
             }
@@ -390,6 +427,89 @@ class PaymentController extends Controller
                 'success' => false,
                 'message' => 'An error occurred processing your payment'
             ], 500);
+        }
+    }
+
+    /**
+     * Query OPPWA API to get the actual payment status for a checkout
+     */
+    private function getPaymentStatusFromOPPWA(string $checkoutId): ?array
+    {
+        try {
+            // Get OPPWA configuration
+            $environment = config('oppwa.environment', 'test');
+            $envKey = $environment === 'production' ? 'production' : 'test';
+            $baseUrl = config("oppwa.{$envKey}.base_url");
+            $entityId = config("oppwa.{$envKey}.entity_id");
+            $bearerToken = config("oppwa.{$envKey}.bearer_token");
+
+            $url = "{$baseUrl}/v1/checkouts/{$checkoutId}/payment?entityId={$entityId}";
+
+            Log::info('Querying OPPWA for payment status', [
+                'checkout_id' => $checkoutId,
+                'url' => $url,
+                'environment' => $environment
+            ]);
+
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL => $url,
+                CURLOPT_HTTPHEADER => ["Authorization: Bearer {$bearerToken}"],
+                CURLOPT_CUSTOMREQUEST => 'GET',
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 30, // 30 second timeout
+            ]);
+
+            $response = curl_exec($ch);
+
+            if (curl_errno($ch)) {
+                Log::error('cURL error querying OPPWA payment status', [
+                    'checkout_id' => $checkoutId,
+                    'error' => curl_error($ch)
+                ]);
+                curl_close($ch);
+                return null;
+            }
+
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($httpCode !== 200) {
+                Log::error('OPPWA API returned non-200 status', [
+                    'checkout_id' => $checkoutId,
+                    'http_code' => $httpCode,
+                    'response' => $response
+                ]);
+                return null;
+            }
+
+            $data = json_decode($response, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                Log::error('Failed to parse OPPWA payment status response', [
+                    'checkout_id' => $checkoutId,
+                    'response' => $response,
+                    'json_error' => json_last_error_msg()
+                ]);
+                return null;
+            }
+
+            Log::info('Successfully retrieved payment status from OPPWA', [
+                'checkout_id' => $checkoutId,
+                'result_code' => $data['result']['code'] ?? 'unknown',
+                'result_description' => $data['result']['description'] ?? 'unknown'
+            ]);
+
+            return $data;
+
+        } catch (\Exception $e) {
+            Log::error('Exception querying OPPWA payment status', [
+                'checkout_id' => $checkoutId,
+                'exception' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            return null;
         }
     }
 

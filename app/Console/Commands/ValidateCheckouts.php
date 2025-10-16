@@ -228,7 +228,9 @@ class ValidateCheckouts extends Command
         }
 
         if (!empty($attachData)) {
-            $order->giveaways()->attach($attachData);
+            foreach ($attachData as $giveawayId => $data) {
+                $order->giveaways()->updateExistingPivot($giveawayId, ['numbers' => $data['numbers']]);
+            }
             $this->info("Tickets assigned for order {$order->id}");
         }
     }

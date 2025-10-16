@@ -244,6 +244,7 @@ class OrdersController extends Controller
 
                     $attachData[$giveawayId] = [
                         'numbers' => json_encode($finalNumbers),
+                        'amount' => $amount,
                     ];
                 }
 
@@ -257,6 +258,21 @@ class OrdersController extends Controller
             return response()->json([
                 'message' => 'Failed to create order',
             ], 500);
+        }
+
+        // For paid orders, attach giveaways immediately with empty numbers
+        // Numbers will be assigned when payment is confirmed
+        if ($total > 0) {
+            $attachData = [];
+            foreach ($request->cart as $item) {
+                $giveawayId = $item['id'];
+                $amount = $item['amount'];
+                $attachData[$giveawayId] = [
+                    'numbers' => json_encode([]),
+                    'amount' => $amount,
+                ];
+            }
+            $order->giveaways()->attach($attachData);
         }
 
         // Send OrderCompleted email for credit-only payments (since they start as completed)
