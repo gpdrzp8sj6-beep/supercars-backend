@@ -205,14 +205,6 @@ class PaymentController extends Controller
                     ], 403);
                 }
 
-            Log::info('generateCheckout called', [
-                'order_id' => $order->id,
-                'user_id' => $user->id,
-                'current_status' => $order->status,
-                'checkout_id_exists' => !empty($order->checkoutId),
-                'amount' => $request->amount
-            ]);
-
             $amount = $request->amount;
 
             // Validate that the requested amount matches the order total
@@ -514,6 +506,17 @@ class PaymentController extends Controller
                 return true;
             });
             
+            // Handle ticket assignment/revocation based on status transition
+            if ($newStatus === 'completed' && $currentStatus !== 'completed') {
+                // Status changing TO completed - assign tickets
+                $this->assignTicketsForOrder($lockedOrder);
+                Log::info('Tickets assigned for order via webhook', ['order_id' => $order->id]);
+            } elseif ($newStatus === 'failed' && $currentStatus === 'completed') {
+                // Status changing FROM completed TO failed - revoke tickets
+                $this->revokeTicketsForOrder($lockedOrder);
+                Log::info('Tickets revoked for failed order via webhook', ['order_id' => $order->id]);
+            }
+
             // Update order status
             $lockedOrder->update(['status' => $newStatus]);
             
