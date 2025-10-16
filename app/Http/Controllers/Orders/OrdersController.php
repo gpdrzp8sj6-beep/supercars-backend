@@ -116,7 +116,7 @@ class OrdersController extends Controller
 
             $order = Order::create([
                 'user_id' => $user->id,
-                'status' => $total == 0 ? 'completed' : 'pending',
+                'status' => $total == 0 ? 'completed' : 'created',
                 'total' => $total,
                 'forenames' => $request->forenames,
                 'surname' => $request->surname,

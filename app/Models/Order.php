@@ -51,20 +51,16 @@ class Order extends Model
 
     protected static function booted(): void
     {
-        // On create: always send order received email
-        static::created(function (Order $order) {
-            try {
-                $email = $order->user?->email;
-                if ($email) {
-                    Mail::to($email)->send(new OrderReceived($order));
-                    Log::info('Order received email sent.', ['order_id' => $order->id]);
-                } else {
-                    Log::warning('Order created but user email missing.', ['order_id' => $order->id]);
-                }
-            } catch (\Throwable $ex) {
-                Log::error('Failed to send order received email: ' . $ex->getMessage(), [
+        // Log when checkoutId is set
+        static::updated(function (Order $order) {
+            if ($order->wasChanged('checkoutId')) {
+                Log::info('Order checkoutId changed', [
                     'order_id' => $order->id,
-                    'exception' => $ex,
+                    'user_id' => $order->user_id,
+                    'old_checkout_id' => $order->getOriginal('checkoutId'),
+                    'new_checkout_id' => $order->checkoutId,
+                    'status' => $order->status,
+                    'timestamp' => now()->toISOString()
                 ]);
             }
         });
@@ -74,6 +70,16 @@ class Order extends Model
             if ($order->wasChanged('status')) {
                 $original = $order->getOriginal('status');
                 $newStatus = $order->status;
+                
+                Log::info('Order status changed', [
+                    'order_id' => $order->id,
+                    'user_id' => $order->user_id,
+                    'from_status' => $original,
+                    'to_status' => $newStatus,
+                    'checkout_id' => $order->checkoutId,
+                    'has_tickets_assigned' => $order->giveaways()->count() > 0,
+                    'timestamp' => now()->toISOString()
+                ]);
                 
                 // Refund credits if order fails and credits were used
                 if ($newStatus === 'failed' && $order->credit_used > 0) {
@@ -93,9 +99,35 @@ class Order extends Model
                         'user_id' => $order->user_id
                     ]);
                 }
+
+                // Revoke tickets if order fails and tickets were assigned
+                if ($newStatus === 'failed' && in_array($original, ['pending', 'completed'])) {
+                    $order->giveaways()->detach();
+                    Log::info('Tickets revoked for failed order', [
+                        'order_id' => $order->id,
+                        'previous_status' => $original
+                    ]);
+                }
+                
+                // Send order received email when status changes to pending
+                if ($newStatus === 'pending' && $original === 'created') {
+                    try {
+                        $email = $order->user?->email;
+                        if ($email) {
+                            Mail::to($email)->send(new OrderReceived($order));
+                            Log::info('Order received email sent for pending status.', ['order_id' => $order->id]);
+                        } else {
+                            Log::warning('Order status changed to pending but user email missing.', ['order_id' => $order->id]);
+                        }
+                    } catch (\Throwable $ex) {
+                        Log::error('Failed to send order received email for pending status: ' . $ex->getMessage(), [
+                            'order_id' => $order->id,
+                            'exception' => $ex,
+                        ]);
+                    }
+                }
                 
                 // Send payment confirmation email when payment is resolved (completed or failed)
-                // But only if NOT triggered from webhook (webhook will handle email manually)
                 if ($original !== $newStatus && in_array($newStatus, ['completed', 'failed']) && !app()->bound('webhook_processing')) {
                     try {
                         $email = $order->user?->email;

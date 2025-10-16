@@ -205,6 +205,14 @@ class PaymentController extends Controller
                     ], 403);
                 }
 
+            Log::info('generateCheckout called', [
+                'order_id' => $order->id,
+                'user_id' => $user->id,
+                'current_status' => $order->status,
+                'checkout_id_exists' => !empty($order->checkoutId),
+                'amount' => $request->amount
+            ]);
+
             $amount = $request->amount;
 
             // Validate that the requested amount matches the order total
@@ -259,7 +267,8 @@ class PaymentController extends Controller
                         "&paymentType=" . config('oppwa.payment.payment_type', 'DB') .
                         "&merchantTransactionId=" . $order->id .
                         "&customer.email=" . $user->email .
-                        "&customer.givenName=" . $user->forenames;
+                        "&customer.givenName=" . $user->forenames .
+                        "&shopperResultUrl=" . env('FRONTEND_URL', 'http://localhost:3000') . "/payment/result?orderId=" . $order->id;
 
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, $url);
@@ -285,14 +294,120 @@ class PaymentController extends Controller
             $order->checkoutId = $exp["checkoutId"];
             $order->save();
 
+            Log::info('Checkout created and saved', [
+                'order_id' => $order->id,
+                'checkout_id' => $exp["checkoutId"],
+                'status_after_save' => $order->fresh()->status,
+                'shopper_result_url' => route('payment.result')
+            ]);
+
     	    return response()->json($exp);
     	} catch(\Exception $err) {
     	    return response()->json(["status" => false]);
     	}
     }
 
+    /**
+     * Handle the payment result update from frontend after OPPWA redirect
+     * Marks order as pending and assigns tickets when payment processing begins
+     */
+    public function handlePaymentResult(Request $request) {
+        try {
+            $request->validate([
+                'orderId' => 'required|numeric|exists:orders,id',
+                'checkoutId' => 'required|string',
+            ]);
+
+            $orderId = $request->orderId;
+            $checkoutId = $request->checkoutId;
+
+            Log::info('handlePaymentResult called from frontend', [
+                'order_id' => $orderId,
+                'checkout_id' => $checkoutId,
+                'request_params' => $request->all()
+            ]);
+
+            $order = Order::where('id', $orderId)
+                          ->where('checkoutId', $checkoutId)
+                          ->first();
+
+            if (!$order) {
+                Log::error('Order not found in payment result handler', [
+                    'order_id' => $orderId,
+                    'checkout_id' => $checkoutId
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Order not found'
+                ], 404);
+            }
+
+            Log::info('Order found for payment result processing', [
+                'order_id' => $order->id,
+                'checkout_id' => $checkoutId,
+                'current_status' => $order->status,
+                'user_id' => $order->user_id
+            ]);
+
+            // Only change status if payment was actually attempted (OPPWA redirected)
+            if ($order->status === 'created') {
+                DB::transaction(function () use ($order, $checkoutId) {
+                    $order->status = 'pending';
+                    $order->save();
+                    // Assign tickets for the order
+                    $this->assignTicketsForOrder($order);
+                    Log::info('Order status changed to pending and tickets assigned', [
+                        'order_id' => $order->id,
+                        'checkout_id' => $checkoutId,
+                        'new_status' => $order->fresh()->status
+                    ]);
+                });
+            } else {
+                Log::info('Order status not changed - already processed', [
+                    'order_id' => $order->id,
+                    'current_status' => $order->status,
+                    'checkout_id' => $checkoutId
+                ]);
+            }
+
+            Log::info('handlePaymentResult completed successfully', [
+                'order_id' => $order->id,
+                'final_status' => $order->fresh()->status
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Payment result processed successfully',
+                'order' => [
+                    'id' => $order->id,
+                    'status' => $order->fresh()->status
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Payment result handler exception', [
+                'exception_message' => $e->getMessage(),
+                'exception_file' => $e->getFile(),
+                'exception_line' => $e->getLine(),
+                'order_id' => $request->orderId ?? 'unknown',
+                'checkout_id' => $request->checkoutId ?? 'unknown',
+                'is_validation_exception' => $e instanceof \Illuminate\Validation\ValidationException,
+                'validation_errors' => $e instanceof \Illuminate\Validation\ValidationException ? $e->errors() : null
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred processing your payment'
+            ], 500);
+        }
+    }
+
     private function processWebhookData(array $webhookData)
     {
+        Log::info('processWebhookData started', [
+            'webhook_data_keys' => array_keys($webhookData),
+            'timestamp' => now()->toISOString()
+        ]);
+
         // Handle nested payload structure from OPPWA
         $payload = $webhookData['payload'] ?? $webhookData;
 
@@ -330,12 +445,22 @@ class PaymentController extends Controller
         $order = Order::where('checkoutId', $checkoutId)->first();
 
         if (!$order) {
-            Log::warning('Order not found for checkoutId', [
+            Log::warning('Order not found for checkoutId in webhook', [
                 'checkout_id' => $checkoutId,
-                'result_code' => $resultCode
+                'result_code' => $resultCode,
+                'webhook_id' => $webhookId
             ]);
             return;
         }
+
+        Log::info('Webhook processing order found', [
+            'order_id' => $order->id,
+            'checkout_id' => $checkoutId,
+            'current_status' => $order->status,
+            'result_code' => $resultCode,
+            'webhook_id' => $webhookId,
+            'has_tickets' => $order->giveaways()->count() > 0
+        ]);
 
         // Determine order status based on result code
         $newStatus = $this->determineOrderStatus($resultCode, $payload);
@@ -389,17 +514,6 @@ class PaymentController extends Controller
                 return true;
             });
             
-            // Handle ticket assignment/revocation based on status transition
-            if ($newStatus === 'completed' && $currentStatus !== 'completed') {
-                // Status changing TO completed - assign tickets
-                $this->assignTicketsForOrder($lockedOrder);
-                Log::info('Tickets assigned for order via webhook', ['order_id' => $order->id]);
-            } elseif ($newStatus === 'failed' && $currentStatus === 'completed') {
-                // Status changing FROM completed TO failed - revoke tickets
-                $this->revokeTicketsForOrder($lockedOrder);
-                Log::info('Tickets revoked for failed order via webhook', ['order_id' => $order->id]);
-            }
-
             // Update order status
             $lockedOrder->update(['status' => $newStatus]);
             
@@ -470,6 +584,7 @@ class PaymentController extends Controller
     {
         // Define valid status transitions
         $validTransitions = [
+            'created' => ['pending'],
             'pending' => ['completed', 'failed'],
             'completed' => ['failed'], // Allow completed -> failed for chargebacks/refunds
             'failed' => [] // Failed is terminal, no transitions allowed
@@ -741,11 +856,23 @@ class PaymentController extends Controller
                 $allAvailable[] = $i;
             }
         }
-        // Shuffle to randomize the order
-        shuffle($allAvailable);
-        // Take the required amount
+        // Randomly select the required amount from available numbers
         $remainingNeeded = $amount - count($availableNumbers);
-        $availableNumbers = array_merge($availableNumbers, array_slice($allAvailable, 0, $remainingNeeded));
+        if ($remainingNeeded > 0 && count($allAvailable) > 0) {
+            if ($remainingNeeded >= count($allAvailable)) {
+                // Take all available
+                $randomNumbers = $allAvailable;
+            } else {
+                // Randomly select remaining needed
+                $randomKeys = array_rand($allAvailable, $remainingNeeded);
+                if (is_array($randomKeys)) {
+                    $randomNumbers = array_map(fn($key) => $allAvailable[$key], $randomKeys);
+                } else {
+                    $randomNumbers = [$allAvailable[$randomKeys]];
+                }
+            }
+            $availableNumbers = array_merge($availableNumbers, $randomNumbers);
+        }
 
         Log::info('Available numbers result', [
             'giveaway_id' => $giveaway->id,

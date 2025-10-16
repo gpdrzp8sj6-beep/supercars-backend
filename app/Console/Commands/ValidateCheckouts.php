@@ -13,10 +13,19 @@ use App\Mail\OrderCompleted;
 class ValidateCheckouts extends Command
 {
     protected $signature = 'app:validate-checkout';
-    protected $description = 'Validate pending checkouts and update their status';
+    protected $description = 'Validate created and pending checkouts and update their status';
 
     public function handle()
     {
+        // Handle created orders (mark as failed after 24 hours)
+        Order::where('status', 'created')->each(function ($order) {
+            if ($order->created_at->lt(Carbon::now()->subHours(24))) {
+                $order->update(['status' => 'failed']);
+                $this->info("Order {$order->id} marked as failed (created timeout).");
+            }
+        });
+
+        // Handle pending orders
         Order::where('status', 'pending')->each(function ($order) {
             // Auto-complete zero-amount orders and skip timeout logic
             if ((float)$order->total === 0.0) {
@@ -32,8 +41,6 @@ class ValidateCheckouts extends Command
             // Check for 24-hour timeout for order payment
             if ($order->created_at->lt(Carbon::now()->subHours(24))) {
                 $order->update(['status' => 'failed']);
-                // Clean up any giveaway_order records for failed orders
-                DB::table('giveaway_order')->where('order_id', $order->id)->delete();
                 $this->info("Order {$order->id} marked as failed (timeout) and tickets released.");
                 return;
             }

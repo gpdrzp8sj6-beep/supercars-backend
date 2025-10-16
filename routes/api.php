@@ -33,6 +33,7 @@ Route::middleware('auth:api')->group(function () {
 
     Route::prefix('payment')->group(function () {
         Route::get('/', [PaymentController::class, 'generateCheckout']);
+        Route::post('result', [PaymentController::class, 'handlePaymentResult']);
     });
 
     // Addresses management
@@ -50,6 +51,9 @@ Route::middleware('auth:api')->group(function () {
         Route::post('manage', [CreditController::class, 'manageCredit']);
     });
 });
+
+// Payment result handler - needs to be outside auth since OPPWA redirects user here
+Route::get('payment/result', [PaymentController::class, 'handlePaymentResult'])->name('payment.result');
 
 Route::get('/settings', function () {
     return response()->json(SiteSettings::first());
