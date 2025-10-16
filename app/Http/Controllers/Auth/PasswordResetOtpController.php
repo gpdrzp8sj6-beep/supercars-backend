@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules;
-use Illuminate\Support\Facades\Cache;
+use Illuminate\Validation\ValidationException;
 
 class PasswordResetOtpController extends Controller
 {
@@ -21,11 +21,17 @@ class PasswordResetOtpController extends Controller
     public function sendOtp(Request $request): JsonResponse
     {
         $request->validate([
-            'email' => 'required|email|exists:users,email',
+            'email' => 'required|email',
         ]);
 
         $email = $request->email;
         $user = User::where('email', $email)->first();
+
+        if (!$user) {
+            throw ValidationException::withMessages([
+                'email' => ['The email does not exist.'],
+            ]);
+        }
 
         // Check rate limiting
         $ip = $request->ip();
