@@ -399,7 +399,6 @@ class PaymentController extends Controller
             $exp["integrity"] = $responseData["integrity"] ?? null;
 
             $order->checkoutId = $exp["checkoutId"];
-            $order->status = 'pending'; // Set status to pending when checkout is created
             $order->save();
 
             Log::info('Checkout created and saved', [
