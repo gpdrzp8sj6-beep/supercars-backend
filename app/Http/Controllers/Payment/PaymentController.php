@@ -1377,7 +1377,8 @@ class PaymentController extends Controller
 
             // Check if this giveaway is already attached to this order
             $existingAttachment = $order->giveaways()->where('giveaway_id', $giveawayId)->first();
-            if ($existingAttachment && !empty($existingAttachment->pivot->numbers)) {
+            $existingNumbers = $existingAttachment ? json_decode($existingAttachment->pivot->numbers, true) : [];
+            if ($existingAttachment && !empty($existingNumbers)) {
                 Log::info("Giveaway {$giveawayId} already has ticket numbers for order {$order->id}, skipping");
                 continue;
             }
