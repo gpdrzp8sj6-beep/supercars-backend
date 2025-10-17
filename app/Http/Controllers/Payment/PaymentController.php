@@ -300,7 +300,7 @@ class PaymentController extends Controller
                 'currency' => config('oppwa.payment.currency', 'GBP'),
                 'payment_type' => config('oppwa.payment.payment_type', 'DB'),
                 'create_registration' => true,
-                'test_mode' => 'EXTERNAL',
+                'test_mode' => $environment === 'test' ? 'EXTERNAL' : 'NOT_SENT',
                 'custom_3ds2_enrolled' => true,
                 'custom_3ds2_flow' => 'challenge',
                 'standing_instruction_mode' => 'INITIAL',
@@ -322,7 +322,7 @@ class PaymentController extends Controller
                         "&createRegistration=true" .
                         "&customParameters[3DS2_enrolled]=true" .
                         "&customParameters[3DS2_flow]=challenge" .
-                        "&testMode=EXTERNAL" .
+                        ($environment === 'test' ? "&testMode=EXTERNAL" : "") .
                         "&amount=" . $amount .
                         "&currency=" . config('oppwa.payment.currency', 'GBP') .
                         "&paymentType=" . config('oppwa.payment.payment_type', 'DB') .
@@ -812,7 +812,7 @@ class PaymentController extends Controller
                         "&standingInstruction.type=" . ($paymentData['standingInstruction']['type'] ?? 'UNSCHEDULED') .
                         "&standingInstruction.mode=" . ($paymentData['standingInstruction']['mode'] ?? 'REPEATED') .
                         "&standingInstruction.source=" . ($paymentData['standingInstruction']['source'] ?? 'MIT') .
-                        "&testMode=EXTERNAL" .
+                        ($environment === 'test' ? "&testMode=EXTERNAL" : "") .
                         "&customer.givenName=" . ($paymentData['customer']['givenName'] ?? '') .
                         "&customer.surname=" . ($paymentData['customer']['surname'] ?? '') .
                         "&customer.ip=" . ($paymentData['customer']['ip'] ?? request()->ip()) .
