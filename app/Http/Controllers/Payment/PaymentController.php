@@ -1319,6 +1319,16 @@ class PaymentController extends Controller
             'existing_giveaways' => $order->giveaways()->count()
         ]);
 
+        // Check if tickets have already been assigned to prevent duplicates
+        $existingGiveawaysCount = $order->giveaways()->count();
+        if ($existingGiveawaysCount > 0) {
+            Log::info('Tickets already assigned to order, skipping duplicate assignment', [
+                'order_id' => $order->id,
+                'existing_giveaways_count' => $existingGiveawaysCount
+            ]);
+            return;
+        }
+
         $attachData = [];
 
         foreach ($cart as $item) {
