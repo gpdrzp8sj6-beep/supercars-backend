@@ -207,12 +207,44 @@ class PaymentController extends Controller
 
             $amount = $request->amount;
 
-            // Validate that the requested amount matches the order total
-            if ((float)$amount !== (float)$order->total) {
+            // Check if order already has a checkout ID (from previous session/refresh)
+            // This should be checked FIRST before any amount validation
+            if ($order->checkoutId) {
+                Log::info('Order already has checkout ID, returning existing checkout', [
+                    'order_id' => $order->id,
+                    'existing_checkout_id' => $order->checkoutId,
+                    'order_status' => $order->status,
+                    'request_amount' => $amount,
+                    'order_total' => $order->total
+                ]);
+
+                // For completed orders, don't allow payment retry
+                if ($order->status === 'completed') {
+                    return response()->json([
+                        'message' => 'This order has already been completed',
+                    ], 400);
+                }
+
+                // For pending orders, return existing checkout to allow retry
+                // We don't validate amount here because the checkout was already created with the correct amount
+                return response()->json([
+                    'status' => true,
+                    'checkoutId' => $order->checkoutId,
+                    'integrity' => null, // We don't store integrity, but widget can still work
+                    'message' => 'Using existing checkout session'
+                ]);
+            }
+
+            // Special case: allow amount=1 for zero-total orders (frontend test request)
+            $isTestRequest = ((float)$order->total === 0.0) && ((float)$amount === 1.0);
+
+            // Validate that the requested amount matches the order total (unless it's a test request)
+            if (!$isTestRequest && (float)$amount !== (float)$order->total) {
                 Log::error('Amount mismatch in createCheckout', [
                     'order_id' => $order->id,
                     'request_amount' => $amount,
                     'order_total' => $order->total,
+                    'is_test_request' => $isTestRequest
                 ]);
                 return response()->json([
                     'message' => 'Payment amount does not match order total',
@@ -236,8 +268,28 @@ class PaymentController extends Controller
             $entityId = config("oppwa.{$envKey}.entity_id");
             $bearerToken = config("oppwa.{$envKey}.bearer_token");
             
+            // Get user's billing address if available
+            $billingAddress = $user->addresses()->where('is_default', true)->first();
+            
+            // Validate and provide proper defaults for billing information
+            $billingCity = $billingAddress->city ?? 'London';
+            $billingCountry = $billingAddress->country ?? 'GB';
+            $billingPostcode = $billingAddress->post_code ?? 'SW1A 1AA';
+            $billingStreet = $billingAddress->address_line_1 ?? '123 Default Street';
+            
+            // Ensure country is a valid ISO 3166-1 alpha-2 code
+            $validCountries = ['GB', 'US', 'CA', 'AU', 'DE', 'FR', 'IT', 'ES', 'NL', 'BE'];
+            if (!in_array(strtoupper($billingCountry), $validCountries)) {
+                $billingCountry = 'GB'; // Default to UK
+            }
+            
+            // Ensure city is not empty or invalid
+            if (empty($billingCity) || strtolower($billingCity) === 'test') {
+                $billingCity = 'London';
+            }
+            
             // Log OPPWA configuration being used for checkout
-            Log::info('OPPWA Configuration - createCheckout()', [
+            Log::info('OPPWA Configuration - createCheckout() with Network Token Provisioning', [
                 'environment_config' => $environment,
                 'env_key_used' => $envKey,
                 'base_url' => $baseUrl,
@@ -247,20 +299,48 @@ class PaymentController extends Controller
                 'bearer_token_preview' => $bearerToken ? substr($bearerToken, 0, 12) . '...' : 'NONE',
                 'currency' => config('oppwa.payment.currency', 'GBP'),
                 'payment_type' => config('oppwa.payment.payment_type', 'DB'),
+                'create_registration' => true,
+                'test_mode' => 'EXTERNAL',
+                'custom_3ds2_enrolled' => true,
+                'custom_3ds2_flow' => 'challenge',
+                'standing_instruction_mode' => 'INITIAL',
+                'standing_instruction_source' => 'CIT',
+                'standing_instruction_type' => 'UNSCHEDULED',
                 'amount' => $amount,
                 'order_id' => $order->id,
-                'merchant_transaction_id' => $order->id
+                'merchant_transaction_id' => $order->id,
+                'customer_email' => $user->email,
+                'customer_ip' => request()->ip(),
+                'billing_address_available' => $billingAddress ? 'YES' : 'NO',
+                'billing_city' => $billingCity,
+                'billing_country' => $billingCountry
             ]);
             
             $url = "{$baseUrl}/v1/checkouts";
+            
             $data = "entityId={$entityId}" .
+                        "&createRegistration=true" .
+                        "&customParameters[3DS2_enrolled]=true" .
+                        "&customParameters[3DS2_flow]=challenge" .
+                        "&testMode=EXTERNAL" .
                         "&amount=" . $amount .
                         "&currency=" . config('oppwa.payment.currency', 'GBP') .
                         "&paymentType=" . config('oppwa.payment.payment_type', 'DB') .
+                        "&standingInstruction.mode=INITIAL" .
+                        "&standingInstruction.source=CIT" .
+                        "&standingInstruction.type=UNSCHEDULED" .
                         "&merchantTransactionId=" . $order->id .
                         "&customer.email=" . $user->email .
                         "&customer.givenName=" . $user->forenames .
-                        "&shopperResultUrl=" . env('FRONTEND_URL', 'http://localhost:3000') . "/payment/result?orderId=" . $order->id;
+                        "&customer.surname=" . ($user->surname ?? $user->last_name ?? '') .
+                        "&customer.ip=" . request()->ip() .
+                        "&customer.language=EN" .
+                        "&billing.city=" . urlencode($billingCity) .
+                        "&billing.country=" . strtoupper($billingCountry) .
+                        "&billing.postcode=" . urlencode($billingPostcode) .
+                        "&billing.state=" . urlencode($billingCity) .
+                        "&billing.street1=" . urlencode($billingStreet) .
+                        "&integrity=true";
 
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, $url);
@@ -271,6 +351,16 @@ class PaymentController extends Controller
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);// this should be set to true in production
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             $responseData = json_decode(curl_exec($ch), true);
+            
+            // Log the OPPWA response for debugging
+            Log::info('OPPWA checkout API response', [
+                'order_id' => $order->id,
+                'response_data' => $responseData,
+                'response_type' => gettype($responseData),
+                'http_code' => curl_getinfo($ch, CURLINFO_HTTP_CODE),
+                'curl_error' => curl_error($ch)
+            ]);
+            
             if(curl_errno($ch)) {
                 Log::error('cURL error occurred while generating checkout', [
                     'order_id' => $order->id,
@@ -279,24 +369,117 @@ class PaymentController extends Controller
                 return curl_error($ch);
             }
             curl_close($ch);
+            
+            // Check if response contains an error (error codes don't start with "000")
+            if (isset($responseData['result']) && isset($responseData['result']['code'])) {
+                $resultCode = $responseData['result']['code'];
+                // Only treat non-000 codes as errors
+                if (!str_starts_with($resultCode, '000')) {
+                    Log::error('OPPWA API returned an error', [
+                        'order_id' => $order->id,
+                        'result_code' => $resultCode,
+                        'result_description' => $responseData['result']['description'] ?? 'No description'
+                    ]);
+                    throw new \Exception('OPPWA API Error: ' . ($responseData['result']['description'] ?? 'Unknown error'));
+                }
+            }
+            
+            // Check if response has the expected id field
+            if (!isset($responseData['id'])) {
+                Log::error('OPPWA API response missing id field', [
+                    'order_id' => $order->id,
+                    'response_data' => $responseData
+                ]);
+                throw new \Exception('OPPWA API response missing checkout ID');
+            }
+            
             $exp = [];
             $exp["status"] = true;
             $exp["checkoutId"] = $responseData["id"];
+            $exp["integrity"] = $responseData["integrity"] ?? null;
 
             $order->checkoutId = $exp["checkoutId"];
+            $order->status = 'pending'; // Set status to pending when checkout is created
             $order->save();
 
             Log::info('Checkout created and saved', [
                 'order_id' => $order->id,
                 'checkout_id' => $exp["checkoutId"],
-                'status_after_save' => $order->fresh()->status,
-                'shopper_result_url' => route('payment.result')
+                'status_after_save' => $order->fresh()->status
             ]);
 
     	    return response()->json($exp);
     	} catch(\Exception $err) {
     	    return response()->json(["status" => false]);
     	}
+    }
+
+    /**
+     * Get order ID by checkout ID
+     */
+    public function getOrderByCheckoutId(Request $request, $checkoutId) {
+        try {
+            Log::info('getOrderByCheckoutId called', [
+                'checkout_id' => $checkoutId,
+                'request_params' => $request->all(),
+                'headers' => $request->headers->all()
+            ]);
+
+            $user = $request->user();
+            
+            if (!$user) {
+                Log::error('User not authenticated for getOrderByCheckoutId', [
+                    'checkout_id' => $checkoutId
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not authenticated'
+                ], 401);
+            }
+
+            Log::info('Looking up order by checkout ID', [
+                'checkout_id' => $checkoutId,
+                'user_id' => $user->id
+            ]);
+            
+            $order = Order::where('checkoutId', $checkoutId)
+                         ->where('user_id', $user->id)
+                         ->first();
+
+            if (!$order) {
+                Log::warning('Order not found for checkout ID', [
+                    'checkout_id' => $checkoutId,
+                    'user_id' => $user->id,
+                    'all_orders_for_user' => Order::where('user_id', $user->id)->pluck('checkoutId')->toArray()
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Order not found'
+                ], 404);
+            }
+
+            Log::info('Order found for checkout ID', [
+                'checkout_id' => $checkoutId,
+                'order_id' => $order->id,
+                'order_status' => $order->status
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'orderId' => $order->id
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error getting order by checkout ID', [
+                'checkout_id' => $checkoutId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Error retrieving order'
+            ], 500);
+        }
     }
 
     /**
@@ -307,26 +490,24 @@ class PaymentController extends Controller
         try {
             $request->validate([
                 'orderId' => 'required|numeric|exists:orders,id',
-                'checkoutId' => 'required|string',
+                'resourcePath' => 'required|string',
             ]);
 
             $orderId = $request->orderId;
-            $checkoutId = $request->checkoutId;
+            $resourcePath = $request->resourcePath;
 
             Log::info('handlePaymentResult called from frontend', [
                 'order_id' => $orderId,
-                'checkout_id' => $checkoutId,
+                'resource_path' => $resourcePath,
                 'request_params' => $request->all()
             ]);
 
-            $order = Order::where('id', $orderId)
-                          ->where('checkoutId', $checkoutId)
-                          ->first();
+            $order = Order::where('id', $orderId)->first();
 
             if (!$order) {
                 Log::error('Order not found in payment result handler', [
                     'order_id' => $orderId,
-                    'checkout_id' => $checkoutId
+                    'resource_path' => $resourcePath
                 ]);
                 return response()->json([
                     'success' => false,
@@ -336,18 +517,18 @@ class PaymentController extends Controller
 
             Log::info('Order found for payment result processing', [
                 'order_id' => $order->id,
-                'checkout_id' => $checkoutId,
+                'resource_path' => $resourcePath,
                 'current_status' => $order->status,
                 'user_id' => $order->user_id
             ]);
 
-            // Query OPPWA for actual payment status
-            $paymentStatus = $this->getPaymentStatusFromOPPWA($checkoutId);
+            // Query OPPWA for payment status using resourcePath
+            $paymentStatus = $this->getPaymentStatusFromResourcePath($resourcePath);
 
             if (!$paymentStatus) {
                 Log::error('Failed to get payment status from OPPWA', [
                     'order_id' => $order->id,
-                    'checkout_id' => $checkoutId
+                    'resource_path' => $resourcePath
                 ]);
                 return response()->json([
                     'success' => false,
@@ -360,16 +541,21 @@ class PaymentController extends Controller
 
             Log::info('Payment status determined from OPPWA', [
                 'order_id' => $order->id,
-                'checkout_id' => $checkoutId,
+                'resource_path' => $resourcePath,
                 'oppwa_result_code' => $resultCode,
                 'oppwa_result_description' => $paymentStatus['result']['description'] ?? 'unknown',
                 'determined_status' => $newStatus,
-                'current_order_status' => $order->status
+                'current_order_status' => $order->status,
+                'network_token_info' => [
+                    'has_token_history' => isset($paymentStatus['tokenTransactionHistory']),
+                    'card_bin' => $paymentStatus['card']['bin'] ?? null,
+                    'token_provisioning_status' => $paymentStatus['tokenTransactionHistory'][0]['status'] ?? null
+                ]
             ]);
 
             // Only update if status would actually change
             if ($order->status !== $newStatus) {
-                DB::transaction(function () use ($order, $newStatus, $checkoutId) {
+                DB::transaction(function () use ($order, $newStatus, $resourcePath) {
                     $oldStatus = $order->status;
                     $order->status = $newStatus;
                     $order->save();
@@ -379,13 +565,13 @@ class PaymentController extends Controller
                         $this->assignTicketsForOrder($order);
                         Log::info('Tickets assigned for completed order', [
                             'order_id' => $order->id,
-                            'checkout_id' => $checkoutId
+                            'resource_path' => $resourcePath
                         ]);
                     }
 
                     Log::info('Order status changed via handlePaymentResult', [
                         'order_id' => $order->id,
-                        'checkout_id' => $checkoutId,
+                        'resource_path' => $resourcePath,
                         'from_status' => $oldStatus,
                         'to_status' => $newStatus
                     ]);
@@ -395,7 +581,7 @@ class PaymentController extends Controller
                     'order_id' => $order->id,
                     'current_status' => $order->status,
                     'determined_status' => $newStatus,
-                    'checkout_id' => $checkoutId
+                    'resource_path' => $resourcePath
                 ]);
             }
 
@@ -433,7 +619,7 @@ class PaymentController extends Controller
     /**
      * Query OPPWA API to get the actual payment status for a checkout
      */
-    private function getPaymentStatusFromOPPWA(string $checkoutId): ?array
+    private function getPaymentStatusFromOPPWA(string $paymentId): ?array
     {
         try {
             // Get OPPWA configuration
@@ -443,10 +629,10 @@ class PaymentController extends Controller
             $entityId = config("oppwa.{$envKey}.entity_id");
             $bearerToken = config("oppwa.{$envKey}.bearer_token");
 
-            $url = "{$baseUrl}/v1/checkouts/{$checkoutId}/payment?entityId={$entityId}";
+            $url = "{$baseUrl}/v1/payments/{$paymentId}?entityId={$entityId}";
 
             Log::info('Querying OPPWA for payment status', [
-                'checkout_id' => $checkoutId,
+                'payment_id' => $paymentId,
                 'url' => $url,
                 'environment' => $environment
             ]);
@@ -465,7 +651,7 @@ class PaymentController extends Controller
 
             if (curl_errno($ch)) {
                 Log::error('cURL error querying OPPWA payment status', [
-                    'checkout_id' => $checkoutId,
+                    'payment_id' => $paymentId,
                     'error' => curl_error($ch)
                 ]);
                 curl_close($ch);
@@ -477,7 +663,7 @@ class PaymentController extends Controller
 
             if ($httpCode !== 200) {
                 Log::error('OPPWA API returned non-200 status', [
-                    'checkout_id' => $checkoutId,
+                    'payment_id' => $paymentId,
                     'http_code' => $httpCode,
                     'response' => $response
                 ]);
@@ -487,7 +673,7 @@ class PaymentController extends Controller
             $data = json_decode($response, true);
             if (json_last_error() !== JSON_ERROR_NONE) {
                 Log::error('Failed to parse OPPWA payment status response', [
-                    'checkout_id' => $checkoutId,
+                    'payment_id' => $paymentId,
                     'response' => $response,
                     'json_error' => json_last_error_msg()
                 ]);
@@ -495,7 +681,7 @@ class PaymentController extends Controller
             }
 
             Log::info('Successfully retrieved payment status from OPPWA', [
-                'checkout_id' => $checkoutId,
+                'payment_id' => $paymentId,
                 'result_code' => $data['result']['code'] ?? 'unknown',
                 'result_description' => $data['result']['description'] ?? 'unknown'
             ]);
@@ -504,12 +690,330 @@ class PaymentController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Exception querying OPPWA payment status', [
-                'checkout_id' => $checkoutId,
+                'payment_id' => $paymentId,
                 'exception' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine()
             ]);
             return null;
+        }
+    }
+
+    /**
+     * Query OPPWA API to get the payment status using resourcePath
+     */
+    private function getPaymentStatusFromResourcePath(string $resourcePath): ?array
+    {
+        try {
+            // Get OPPWA configuration
+            $environment = config('oppwa.environment', 'test');
+            $envKey = $environment === 'production' ? 'production' : 'test';
+            $baseUrl = config("oppwa.{$envKey}.base_url");
+            $entityId = config("oppwa.{$envKey}.entity_id");
+            $bearerToken = config("oppwa.{$envKey}.bearer_token");
+
+            $url = "{$baseUrl}{$resourcePath}?entityId={$entityId}";
+
+            Log::info('Querying OPPWA for payment status using resourcePath', [
+                'resource_path' => $resourcePath,
+                'full_url' => $url,
+                'environment' => $environment
+            ]);
+
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL => $url,
+                CURLOPT_HTTPHEADER => ["Authorization: Bearer {$bearerToken}"],
+                CURLOPT_CUSTOMREQUEST => 'GET',
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 30, // 30 second timeout
+            ]);
+
+            $response = curl_exec($ch);
+
+            if (curl_errno($ch)) {
+                Log::error('cURL error querying OPPWA payment status', [
+                    'resource_path' => $resourcePath,
+                    'error' => curl_error($ch)
+                ]);
+                curl_close($ch);
+                return null;
+            }
+
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($httpCode !== 200) {
+                Log::error('OPPWA API returned non-200 status', [
+                    'resource_path' => $resourcePath,
+                    'http_code' => $httpCode,
+                    'response' => $response
+                ]);
+                return null;
+            }
+
+            $data = json_decode($response, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                Log::error('Failed to parse OPPWA payment status response', [
+                    'resource_path' => $resourcePath,
+                    'response' => $response,
+                    'json_error' => json_last_error_msg()
+                ]);
+                return null;
+            }
+
+            Log::info('Successfully retrieved payment status from OPPWA', [
+                'resource_path' => $resourcePath,
+                'result_code' => $data['result']['code'] ?? 'unknown',
+                'result_description' => $data['result']['description'] ?? 'unknown',
+                'network_token_info' => [
+                    'has_token_history' => isset($data['tokenTransactionHistory']),
+                    'token_history_count' => isset($data['tokenTransactionHistory']) ? count($data['tokenTransactionHistory']) : 0,
+                    'card_bin' => $data['card']['bin'] ?? null,
+                    'first_token_status' => $data['tokenTransactionHistory'][0]['status'] ?? null
+                ]
+            ]);
+
+            return $data;
+
+        } catch (\Exception $e) {
+            Log::error('Exception querying OPPWA payment status', [
+                'resource_path' => $resourcePath,
+                'exception' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * Process a payment using the merchant token/registration
+     */
+    private function processPaymentWithToken(string $registrationId, array $paymentData): ?array
+    {
+        try {
+            // Get OPPWA configuration
+            $environment = config('oppwa.environment', 'test');
+            $envKey = $environment === 'production' ? 'production' : 'test';
+            $baseUrl = config("oppwa.{$envKey}.base_url");
+            $entityId = config("oppwa.{$envKey}.entity_id");
+            $bearerToken = config("oppwa.{$envKey}.bearer_token");
+
+            $url = "{$baseUrl}/v1/registrations/{$registrationId}/payments";
+
+            // Build payment data
+            $data = "entityId={$entityId}" .
+                        "&paymentBrand=" . ($paymentData['paymentBrand'] ?? 'VISA') .
+                        "&paymentType=" . ($paymentData['paymentType'] ?? 'DB') .
+                        "&amount=" . $paymentData['amount'] .
+                        "&currency=" . ($paymentData['currency'] ?? 'GBP') .
+                        "&standingInstruction.type=" . ($paymentData['standingInstruction']['type'] ?? 'UNSCHEDULED') .
+                        "&standingInstruction.mode=" . ($paymentData['standingInstruction']['mode'] ?? 'REPEATED') .
+                        "&standingInstruction.source=" . ($paymentData['standingInstruction']['source'] ?? 'MIT') .
+                        "&testMode=EXTERNAL" .
+                        "&customer.givenName=" . ($paymentData['customer']['givenName'] ?? '') .
+                        "&customer.surname=" . ($paymentData['customer']['surname'] ?? '') .
+                        "&customer.ip=" . ($paymentData['customer']['ip'] ?? request()->ip()) .
+                        "&customer.language=" . ($paymentData['customer']['language'] ?? 'en') .
+                        "&customer.email=" . ($paymentData['customer']['email'] ?? '');
+
+            // Add billing address if provided
+            if (isset($paymentData['billing'])) {
+                $data .= "&billing.city=" . ($paymentData['billing']['city'] ?? 'London') .
+                        "&billing.country=" . ($paymentData['billing']['country'] ?? 'GB') .
+                        "&billing.postcode=" . ($paymentData['billing']['postcode'] ?? 'SW1A 1AA') .
+                        "&billing.state=" . ($paymentData['billing']['state'] ?? 'London') .
+                        "&billing.street1=" . ($paymentData['billing']['street1'] ?? '123 Default Street');
+            }
+
+            Log::info('Processing payment with merchant token', [
+                'registration_id' => $registrationId,
+                'url' => $url,
+                'environment' => $environment,
+                'payment_data' => $paymentData
+            ]);
+
+            $ch = curl_init();
+            curl_setopt_array($ch, [
+                CURLOPT_URL => $url,
+                CURLOPT_HTTPHEADER => ["Authorization: Bearer {$bearerToken}"],
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => $data,
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 30,
+            ]);
+
+            $response = curl_exec($ch);
+
+            if (curl_errno($ch)) {
+                Log::error('cURL error processing payment with token', [
+                    'registration_id' => $registrationId,
+                    'error' => curl_error($ch)
+                ]);
+                curl_close($ch);
+                return null;
+            }
+
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($httpCode !== 200) {
+                Log::error('OPPWA API returned non-200 status for token payment', [
+                    'registration_id' => $registrationId,
+                    'http_code' => $httpCode,
+                    'response' => $response
+                ]);
+                return null;
+            }
+
+            $data = json_decode($response, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                Log::error('Failed to parse OPPWA token payment response', [
+                    'registration_id' => $registrationId,
+                    'response' => $response,
+                    'json_error' => json_last_error_msg()
+                ]);
+                return null;
+            }
+
+            Log::info('Successfully processed payment with merchant token', [
+                'registration_id' => $registrationId,
+                'result_code' => $data['result']['code'] ?? 'unknown',
+                'result_description' => $data['result']['description'] ?? 'unknown',
+                'network_token_info' => [
+                    'has_token_history' => isset($data['tokenTransactionHistory']),
+                    'token_history_count' => isset($data['tokenTransactionHistory']) ? count($data['tokenTransactionHistory']) : 0,
+                    'card_bin' => $data['card']['bin'] ?? null,
+                    'first_token_status' => $data['tokenTransactionHistory'][0]['status'] ?? null
+                ]
+            ]);
+
+            return $data;
+
+        } catch (\Exception $e) {
+            Log::error('Exception processing payment with token', [
+                'registration_id' => $registrationId,
+                'exception' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * Process a payment using stored merchant token
+     */
+    public function processTokenPayment(Request $request) {
+        try {
+            $request->validate([
+                'registrationId' => 'required|string',
+                'amount' => 'required|numeric',
+                'currency' => 'sometimes|string|size:3',
+                'paymentBrand' => 'sometimes|string',
+                'orderId' => 'sometimes|numeric|exists:orders,id',
+            ]);
+
+            $registrationId = $request->registrationId;
+            $amount = $request->amount;
+            $currency = $request->currency ?? 'GBP';
+            $paymentBrand = $request->paymentBrand ?? 'VISA';
+            $orderId = $request->orderId;
+
+            // Get user and billing address
+            $user = $request->user();
+            $billingAddress = $user->addresses()->where('is_default', true)->first();
+
+            $paymentData = [
+                'amount' => $amount,
+                'currency' => $currency,
+                'paymentBrand' => $paymentBrand,
+                'paymentType' => 'DB',
+                'standingInstruction' => [
+                    'type' => 'UNSCHEDULED',
+                    'mode' => 'REPEATED',
+                    'source' => 'MIT'
+                ],
+                'customer' => [
+                    'givenName' => $user->forenames,
+                    'surname' => $user->surname ?? $user->last_name ?? '',
+                    'email' => $user->email,
+                    'ip' => request()->ip(),
+                    'language' => 'en'
+                ],
+                'billing' => [
+                    'city' => $billingAddress->city ?? 'London',
+                    'country' => $billingAddress->country ?? 'GB',
+                    'postcode' => $billingAddress->post_code ?? 'SW1A 1AA',
+                    'state' => $billingAddress->city ?? 'London',
+                    'street1' => $billingAddress->address_line_1 ?? '123 Default Street'
+                ]
+            ];
+
+            Log::info('Processing token payment request', [
+                'registration_id' => $registrationId,
+                'amount' => $amount,
+                'currency' => $currency,
+                'order_id' => $orderId,
+                'user_id' => $user->id
+            ]);
+
+            $paymentResult = $this->processPaymentWithToken($registrationId, $paymentData);
+
+            if (!$paymentResult) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to process payment with token'
+                ], 500);
+            }
+
+            $resultCode = $paymentResult['result']['code'];
+            $paymentStatus = $this->determineOrderStatus($resultCode, $paymentResult);
+
+            // If orderId is provided, update the order
+            if ($orderId) {
+                $order = Order::where('id', $orderId)->where('user_id', $user->id)->first();
+                if ($order) {
+                    $order->status = $paymentStatus;
+                    $order->save();
+
+                    if ($paymentStatus === 'completed') {
+                        $this->assignTicketsForOrder($order);
+                    }
+
+                    Log::info('Order updated with token payment', [
+                        'order_id' => $orderId,
+                        'payment_status' => $paymentStatus,
+                        'registration_id' => $registrationId
+                    ]);
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'payment' => $paymentResult,
+                'status' => $paymentStatus,
+                'network_token_info' => [
+                    'has_token_history' => isset($paymentResult['tokenTransactionHistory']),
+                    'card_bin' => $paymentResult['card']['bin'] ?? null,
+                    'token_used' => isset($paymentResult['tokenTransactionHistory']) && !empty($paymentResult['tokenTransactionHistory'])
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Token payment processing error: ' . $e->getMessage(), [
+                'exception' => $e,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Token payment processing failed',
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
 

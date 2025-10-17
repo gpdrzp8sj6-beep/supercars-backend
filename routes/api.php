@@ -34,6 +34,8 @@ Route::middleware('auth:api')->group(function () {
     Route::prefix('payment')->group(function () {
         Route::get('/', [PaymentController::class, 'generateCheckout']);
         Route::post('result', [PaymentController::class, 'handlePaymentResult']);
+        Route::post('token-payment', [PaymentController::class, 'processTokenPayment']);
+        Route::get('order-by-checkout/{checkoutId}', [PaymentController::class, 'getOrderByCheckoutId']);
     });
 
     // Addresses management
