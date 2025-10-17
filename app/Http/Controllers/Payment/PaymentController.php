@@ -561,11 +561,20 @@ class PaymentController extends Controller
 
                     // Only assign tickets if payment is completed
                     if ($newStatus === 'completed') {
-                        $this->assignTicketsForOrder($order);
-                        Log::info('Tickets assigned for completed order', [
-                            'order_id' => $order->id,
-                            'resource_path' => $resourcePath
-                        ]);
+                        // Check if tickets have already been assigned to prevent duplicates
+                        $giveawaysWithRealNumbers = $order->giveaways()->whereRaw('JSON_LENGTH(numbers) > 0')->count();
+                        if ($giveawaysWithRealNumbers === 0) {
+                            $this->assignTicketsForOrder($order);
+                            Log::info('Tickets assigned for completed order', [
+                                'order_id' => $order->id,
+                                'resource_path' => $resourcePath
+                            ]);
+                        } else {
+                            Log::info('Tickets already assigned to order, skipping assignment in handlePaymentResult', [
+                                'order_id' => $order->id,
+                                'giveaways_with_real_numbers_count' => $giveawaysWithRealNumbers
+                            ]);
+                        }
                     }
 
                     Log::info('Order status changed via handlePaymentResult', [
@@ -980,7 +989,16 @@ class PaymentController extends Controller
                     $order->save();
 
                     if ($paymentStatus === 'completed') {
-                        $this->assignTicketsForOrder($order);
+                        // Check if tickets have already been assigned to prevent duplicates
+                        $giveawaysWithRealNumbers = $order->giveaways()->whereRaw('JSON_LENGTH(numbers) > 0')->count();
+                        if ($giveawaysWithRealNumbers === 0) {
+                            $this->assignTicketsForOrder($order);
+                        } else {
+                            Log::info('Tickets already assigned to order, skipping assignment in processTokenPayment', [
+                                'order_id' => $order->id,
+                                'giveaways_with_real_numbers_count' => $giveawaysWithRealNumbers
+                            ]);
+                        }
                     }
 
                     Log::info('Order updated with token payment', [
@@ -1131,9 +1149,19 @@ class PaymentController extends Controller
             
             // Handle ticket assignment/revocation based on status transition
             if ($newStatus === 'completed' && $currentStatus !== 'completed') {
-                // Status changing TO completed - assign tickets
-                $this->assignTicketsForOrder($lockedOrder);
-                Log::info('Tickets assigned for order via webhook', ['order_id' => $order->id]);
+                // Check if tickets have already been assigned to prevent duplicates
+                // Only assign if there are no giveaways with actual ticket numbers assigned (not empty arrays)
+                $giveawaysWithRealNumbers = $lockedOrder->giveaways()->whereRaw('JSON_LENGTH(numbers) > 0')->count();
+                if ($giveawaysWithRealNumbers === 0) {
+                    // Status changing TO completed - assign tickets
+                    $this->assignTicketsForOrder($lockedOrder);
+                    Log::info('Tickets assigned for order via webhook', ['order_id' => $order->id]);
+                } else {
+                    Log::info('Tickets already assigned to order, skipping assignment in webhook', [
+                        'order_id' => $order->id,
+                        'giveaways_with_real_numbers_count' => $giveawaysWithRealNumbers
+                    ]);
+                }
             } elseif ($newStatus === 'failed' && $currentStatus === 'completed') {
                 // Status changing FROM completed TO failed - revoke tickets
                 $this->revokeTicketsForOrder($lockedOrder);
@@ -1318,16 +1346,6 @@ class PaymentController extends Controller
             'giveaways_loaded' => $giveaways->keys()->toArray(),
             'existing_giveaways' => $order->giveaways()->count()
         ]);
-
-        // Check if tickets have already been assigned to prevent duplicates
-        $existingGiveawaysCount = $order->giveaways()->count();
-        if ($existingGiveawaysCount > 0) {
-            Log::info('Tickets already assigned to order, skipping duplicate assignment', [
-                'order_id' => $order->id,
-                'existing_giveaways_count' => $existingGiveawaysCount
-            ]);
-            return;
-        }
 
         $attachData = [];
 

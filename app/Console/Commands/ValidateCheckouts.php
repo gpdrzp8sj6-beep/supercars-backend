@@ -96,22 +96,28 @@ class ValidateCheckouts extends Command
                 // IMPORTANT: Assign tickets BEFORE updating status to avoid race condition
                 // This ensures tickets are assigned before the email is sent
                 if ($status === 'completed') {
-                    $this->assignTicketsForOrder($lockedOrder);
-                    $this->info("Tickets assigned for order {$order->id}.");
-                    
-                    // Verify tickets were actually assigned
-                    $lockedOrder->refresh();
-                    $assignedTickets = $lockedOrder->giveaways->count();
-                    if ($assignedTickets > 0) {
-                        $this->info("Verification: Order {$order->id} has {$assignedTickets} giveaway(s) with tickets assigned.");
+                    // Check if tickets have already been assigned to prevent duplicates
+                    $giveawaysWithRealNumbers = $lockedOrder->giveaways()->whereRaw('JSON_LENGTH(numbers) > 0')->count();
+                    if ($giveawaysWithRealNumbers === 0) {
+                        $this->assignTicketsForOrder($lockedOrder);
+                        $this->info("Tickets assigned for order {$order->id}.");
                         
-                        // Log ticket numbers for verification
-                        foreach ($lockedOrder->giveaways as $giveaway) {
-                            $numbers = json_decode($giveaway->pivot->numbers ?? '[]', true);
-                            $this->info("Giveaway {$giveaway->id}: tickets " . implode(', ', $numbers));
+                        // Verify tickets were actually assigned
+                        $lockedOrder->refresh();
+                        $assignedTickets = $lockedOrder->giveaways->count();
+                        if ($assignedTickets > 0) {
+                            $this->info("Verification: Order {$order->id} has {$assignedTickets} giveaway(s) with tickets assigned.");
+                            
+                            // Log ticket numbers for verification
+                            foreach ($lockedOrder->giveaways as $giveaway) {
+                                $numbers = json_decode($giveaway->pivot->numbers ?? '[]', true);
+                                $this->info("Giveaway {$giveaway->id}: tickets " . implode(', ', $numbers));
+                            }
+                        } else {
+                            $this->error("WARNING: Order {$order->id} marked completed but no tickets assigned!");
                         }
                     } else {
-                        $this->error("WARNING: Order {$order->id} marked completed but no tickets assigned!");
+                        $this->info("Tickets already assigned to order {$order->id}, skipping assignment in ValidateCheckouts");
                     }
                 }
                 

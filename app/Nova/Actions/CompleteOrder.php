@@ -138,8 +138,17 @@ class CompleteOrder extends Action
             });
 
             // Assign tickets
-            $this->assignTicketsForOrder($lockedOrder);
-            Log::info('Tickets assigned for order via manual completion', ['order_id' => $order->id]);
+            // Check if tickets have already been assigned to prevent duplicates
+            $giveawaysWithRealNumbers = $lockedOrder->giveaways()->whereRaw('JSON_LENGTH(numbers) > 0')->count();
+            if ($giveawaysWithRealNumbers === 0) {
+                $this->assignTicketsForOrder($lockedOrder);
+                Log::info('Tickets assigned for order via manual completion', ['order_id' => $order->id]);
+            } else {
+                Log::info('Tickets already assigned to order, skipping assignment in manual completion', [
+                    'order_id' => $order->id,
+                    'giveaways_with_real_numbers_count' => $giveawaysWithRealNumbers
+                ]);
+            }
 
             // Update order status to completed
             $lockedOrder->update(['status' => 'completed']);
