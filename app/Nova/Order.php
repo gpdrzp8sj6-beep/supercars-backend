@@ -150,6 +150,7 @@ class Order extends Resource
     {
         return [
             new \App\Nova\Actions\CompleteOrder,
+            new \App\Nova\Actions\FailOrder,
             new \App\Nova\Actions\ReassignTicketNumbers,
         ];
     }
