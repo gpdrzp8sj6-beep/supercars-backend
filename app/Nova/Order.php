@@ -152,6 +152,7 @@ class Order extends Resource
             new \App\Nova\Actions\CompleteOrder,
             new \App\Nova\Actions\FailOrder,
             new \App\Nova\Actions\ReassignTicketNumbers,
+            new \App\Nova\Actions\RemoveTickets,
         ];
     }
 }

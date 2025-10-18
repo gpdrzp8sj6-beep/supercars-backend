@@ -64,7 +64,7 @@ class ReassignTicketNumbers extends Action
      */
     public function authorizedToRun(Request $request, $model)
     {
-        return $model->status === 'completed' && $model->giveaways()->count() > 0;
+        return $model->giveaways()->count() > 0;
     }
 
     /**
