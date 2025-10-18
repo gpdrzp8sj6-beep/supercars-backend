@@ -12,6 +12,7 @@ use Laravel\Nova\Fields\Number;
 use Laravel\Nova\Http\Requests\NovaRequest;
 use Laravel\Nova\Auth\PasswordValidationRules;
 use App\Nova\CreditTransaction;
+use App\Nova\Order;
 use App\Nova\Actions\AddCreditAction;
 
 class User extends Resource
@@ -96,6 +97,8 @@ class User extends Resource
                 ->step(0.01),
 
             HasMany::make('Credit', 'creditTransactions', CreditTransaction::class),
+
+            HasMany::make('Order', 'order', Order::class),
 
             HasMany::make('Addresses'),
         ];
