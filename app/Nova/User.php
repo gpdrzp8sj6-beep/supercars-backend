@@ -98,7 +98,7 @@ class User extends Resource
 
             HasMany::make('Credit', 'creditTransactions', CreditTransaction::class),
 
-            HasMany::make('Order', 'orders', Order::class),
+            HasMany::make('Order', 'order', Order::class),
 
             HasMany::make('Addresses'),
         ];
