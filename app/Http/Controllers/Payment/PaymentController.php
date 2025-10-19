@@ -324,9 +324,6 @@ class PaymentController extends Controller
                         "&customParameters[3DS2_flow]=challenge" .
                         ($environment === 'test' ? "&testMode=EXTERNAL" : "") .
                         "&amount=" . $amount .
-                        "&paymentBrand=VISA" .
-                        "&paymentBrand=MASTER" .
-                        "&paymentBrand=APPLEPAY" .
                         "&currency=" . config('oppwa.payment.currency', 'GBP') .
                         "&paymentType=" . config('oppwa.payment.payment_type', 'DB') .
                         "&standingInstruction.mode=INITIAL" .
@@ -820,9 +817,6 @@ class PaymentController extends Controller
                         "&paymentType=" . ($paymentData['paymentType'] ?? 'DB') .
                         "&amount=" . $paymentData['amount'] .
                         "&currency=" . ($paymentData['currency'] ?? 'GBP') .
-                        "&paymentBrand=VISA" .
-                        "&paymentBrand=MASTER" .
-                        "&paymentBrand=APPLEPAY" .
                         "&standingInstruction.type=" . ($paymentData['standingInstruction']['type'] ?? 'UNSCHEDULED') .
                         "&standingInstruction.mode=" . ($paymentData['standingInstruction']['mode'] ?? 'REPEATED') .
                         "&standingInstruction.source=" . ($paymentData['standingInstruction']['source'] ?? 'MIT') .
