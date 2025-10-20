@@ -319,16 +319,12 @@ class PaymentController extends Controller
             $url = "{$baseUrl}/v1/checkouts";
             
             $data = "entityId={$entityId}" .
-                        "&createRegistration=true" .
                         "&customParameters[3DS2_enrolled]=true" .
                         "&customParameters[3DS2_flow]=challenge" .
                         ($environment === 'test' ? "&testMode=EXTERNAL" : "") .
                         "&amount=" . $amount .
                         "&currency=" . config('oppwa.payment.currency', 'GBP') .
                         "&paymentType=" . config('oppwa.payment.payment_type', 'DB') .
-                        "&standingInstruction.mode=INITIAL" .
-                        "&standingInstruction.source=CIT" .
-                        "&standingInstruction.type=UNSCHEDULED" .
                         "&merchantTransactionId=" . $order->id .
                         "&customer.email=" . $user->email .
                         "&customer.givenName=" . $user->forenames .
@@ -817,9 +813,6 @@ class PaymentController extends Controller
                         "&paymentType=" . ($paymentData['paymentType'] ?? 'DB') .
                         "&amount=" . $paymentData['amount'] .
                         "&currency=" . ($paymentData['currency'] ?? 'GBP') .
-                        "&standingInstruction.type=" . ($paymentData['standingInstruction']['type'] ?? 'UNSCHEDULED') .
-                        "&standingInstruction.mode=" . ($paymentData['standingInstruction']['mode'] ?? 'REPEATED') .
-                        "&standingInstruction.source=" . ($paymentData['standingInstruction']['source'] ?? 'MIT') .
                         ($environment === 'test' ? "&testMode=EXTERNAL" : "") .
                         "&customer.givenName=" . ($paymentData['customer']['givenName'] ?? '') .
                         "&customer.surname=" . ($paymentData['customer']['surname'] ?? '') .
@@ -940,11 +933,6 @@ class PaymentController extends Controller
                 'currency' => $currency,
                 'paymentBrand' => $paymentBrand,
                 'paymentType' => 'DB',
-                'standingInstruction' => [
-                    'type' => 'UNSCHEDULED',
-                    'mode' => 'REPEATED',
-                    'source' => 'MIT'
-                ],
                 'customer' => [
                     'givenName' => $user->forenames,
                     'surname' => $user->surname ?? $user->last_name ?? '',
