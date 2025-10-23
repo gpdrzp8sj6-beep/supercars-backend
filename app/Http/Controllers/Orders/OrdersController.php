@@ -98,6 +98,18 @@ class OrdersController extends Controller
             $total += $giveaway->price * $item['amount'];
         }
 
+        // Check ticket availability for all items
+        foreach ($request->cart as $item) {
+            $giveaway = $giveaways->get($item['id']);
+            $assignedNumbers = $this->getAssignedNumbersForGiveaway($item['id']);
+            $currentlyAssignedCount = $assignedNumbers->count();
+            if ($giveaway->ticketsTotal > 0 && $currentlyAssignedCount + $item['amount'] > $giveaway->ticketsTotal) {
+                throw ValidationException::withMessages([
+                    'cart' => ["Not enough tickets left in giveaway ID {$item['id']} to fulfill the request."],
+                ]);
+            }
+        }
+
         // Handle credit deduction
         $creditUsed = 0;
         if ($user->credit > 0 && $total > 0) {

@@ -521,14 +521,20 @@ class PaymentController extends Controller
             $paymentStatus = $this->getPaymentStatusFromResourcePath($resourcePath);
 
             if (!$paymentStatus) {
-                Log::error('Failed to get payment status from OPPWA', [
+                Log::info('No payment information found - payment was never attempted or checkout invalid', [
                     'order_id' => $order->id,
-                    'resource_path' => $resourcePath
+                    'resource_path' => $resourcePath,
+                    'current_status' => $order->status
                 ]);
+                // Don't change status if no payment was attempted
                 return response()->json([
-                    'success' => false,
-                    'message' => 'Unable to verify payment status'
-                ], 500);
+                    'success' => true,
+                    'message' => 'No payment attempted for this checkout',
+                    'order' => [
+                        'id' => $order->id,
+                        'status' => $order->status
+                    ]
+                ]);
             }
 
             $resultCode = $paymentStatus['result']['code'];
@@ -1374,26 +1380,6 @@ class PaymentController extends Controller
             // Enforce per-order limit
             if ($amount > $giveaway->ticketsPerUser) {
                 Log::error("Amount for giveaway ID {$giveawayId} exceeds ticketsPerUser limit for order {$order->id}");
-                continue;
-            }
-
-            // Enforce cumulative per-user limit across previous completed orders (exclude current order)
-            $existingUserNumbers = DB::table('giveaway_order')
-                ->join('orders', 'giveaway_order.order_id', '=', 'orders.id')
-                ->where('orders.user_id', $user->id)
-                ->where('orders.status', 'completed')
-                ->where('orders.id', '!=', $order->id) // Exclude current order
-                ->where('giveaway_order.giveaway_id', $giveawayId)
-                ->orderBy('giveaway_order.id')
-                ->pluck('giveaway_order.numbers')
-                ->filter()
-                ->flatMap(function ($jsonNumbers) {
-                    return json_decode($jsonNumbers, true) ?: [];
-                });
-
-            $existingCountForUser = $existingUserNumbers->count();
-            if (($existingCountForUser + $amount) > $giveaway->ticketsPerUser) {
-                Log::error("User already has {$existingCountForUser} ticket(s) for giveaway ID {$giveawayId}, order {$order->id} exceeds limit");
                 continue;
             }
 

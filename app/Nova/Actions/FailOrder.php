@@ -61,8 +61,8 @@ class FailOrder extends Action
      */
     public function authorizedToRun(Request $request, $model)
     {
-        // Only allow failing orders that are not already failed or completed
-        $isAuthorized = !in_array($model->status, ['failed', 'completed']);
+        // Allow failing orders at any time
+        $isAuthorized = true;
 
         // Log authorization check for debugging
         \Illuminate\Support\Facades\Log::info('FailOrder authorization check', [
