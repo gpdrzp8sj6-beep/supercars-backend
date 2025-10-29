@@ -31,7 +31,12 @@ class NovaServiceProvider extends NovaApplicationServiceProvider
                         MenuItem::resource(\App\Nova\Order::class),
                         MenuItem::resource(\App\Nova\Ticket::class),
                         MenuItem::resource(\App\Nova\Winner::class),
+                        
                     ])->icon('briefcase')->collapsable(),
+
+                    MenuSection::make('Tools', [
+                        MenuItem::resource(\App\Nova\TransactionSheet::class),
+                    ])->icon('wrench')->collapsable(),
 
                       MenuSection::make('Site Settings', [
                          MenuItem::resource(\App\Nova\SiteSettings::class),
@@ -101,7 +106,9 @@ class NovaServiceProvider extends NovaApplicationServiceProvider
      */
     public function tools(): array
     {
-        return [];
+        return [
+            new \App\Nova\Tools\TransactionSheetTool,
+        ];
     }
 
     /**

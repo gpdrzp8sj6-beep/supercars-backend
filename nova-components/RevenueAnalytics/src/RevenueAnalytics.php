@@ -33,7 +33,9 @@ class RevenueAnalytics extends Card
         // Calculate revenue for different periods
         $data[] = [
             'period' => 'Today',
-            'revenue' => Order::whereDate('created_at', Carbon::today())->sum('total'),
+            'revenue' => Order::whereDate('created_at', Carbon::today())
+                             ->where('status', 'completed')
+                             ->sum('total'),
             'label' => 'Today',
         ];
 
@@ -42,7 +44,8 @@ class RevenueAnalytics extends Card
             'revenue' => Order::whereBetween('created_at', [
                 Carbon::now()->startOfWeek(),
                 Carbon::now()->endOfWeek()
-            ])->sum('total'),
+            ])->where('status', 'completed')
+              ->sum('total'),
             'label' => 'This Week',
         ];
 
@@ -50,13 +53,16 @@ class RevenueAnalytics extends Card
             'period' => 'This Month',
             'revenue' => Order::whereYear('created_at', Carbon::now()->year)
                             ->whereMonth('created_at', Carbon::now()->month)
+                            ->where('status', 'completed')
                             ->sum('total'),
             'label' => 'This Month',
         ];
 
         $data[] = [
             'period' => 'This Year',
-            'revenue' => Order::whereYear('created_at', Carbon::now()->year)->sum('total'),
+            'revenue' => Order::whereYear('created_at', Carbon::now()->year)
+                             ->where('status', 'completed')
+                             ->sum('total'),
             'label' => 'This Year',
         ];
 

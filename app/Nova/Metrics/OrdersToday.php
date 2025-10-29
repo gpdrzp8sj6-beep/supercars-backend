@@ -17,9 +17,11 @@ class OrdersToday extends Value
      */
     public function calculate(NovaRequest $request)
     {
-    $count = Order::whereDate('created_at', now()->toDateString())->count();
-    Log::info('Nova Metric OrdersToday computed', ['count' => $count]);
-    return $this->result($count);
+        $count = Order::whereDate('created_at', now()->toDateString())
+            ->where('status', 'completed')
+            ->count();
+        Log::info('Nova Metric OrdersToday computed', ['count' => $count]);
+        return $this->result($count);
     }
 
     /**

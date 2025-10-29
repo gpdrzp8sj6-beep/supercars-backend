@@ -5,9 +5,9 @@ namespace App\Nova\Metrics;
 use App\Models\Order;
 use Laravel\Nova\Http\Requests\NovaRequest;
 use Laravel\Nova\Metrics\Value;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
-class OrdersThisMonth extends Value
+class UnpaidTicketsCount extends Value
 {
     /**
      * Calculate the value of the metric.
@@ -17,14 +17,22 @@ class OrdersThisMonth extends Value
      */
     public function calculate(NovaRequest $request)
     {
-        $count = Order::whereMonth('created_at', now()->month)
-                ->whereYear('created_at', now()->year)
-                ->where('status', 'completed')
-                ->count();
+        // Get orders with unpaid tickets (not completed status)
+        $unpaidOrders = Order::whereIn('status', ['pending', 'failed', 'cancelled'])
+            ->whereHas('giveaways')
+            ->with('giveaways')
+            ->get();
 
-        Log::info('Nova Metric OrdersThisMonth computed', ['count' => $count]);
+        $totalTickets = 0;
 
-        return $this->result($count);
+        foreach ($unpaidOrders as $order) {
+            foreach ($order->giveaways as $giveaway) {
+                $ticketCount = count(json_decode($giveaway->pivot->numbers ?? '[]', true) ?: []);
+                $totalTickets += $ticketCount;
+            }
+        }
+
+        return $this->result($totalTickets)->format('0,0');
     }
 
     /**
@@ -54,7 +62,7 @@ class OrdersThisMonth extends Value
      */
     public function uriKey()
     {
-        return 'orders-this-month';
+        return 'unpaid-tickets-count';
     }
 
     /**
@@ -64,6 +72,6 @@ class OrdersThisMonth extends Value
      */
     public function name()
     {
-        return 'Orders This Month';
+        return 'Unpaid Tickets Count';
     }
 }

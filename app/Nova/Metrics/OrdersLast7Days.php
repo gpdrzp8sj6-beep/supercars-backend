@@ -17,12 +17,12 @@ class OrdersLast7Days extends Trend
      */
     public function calculate(NovaRequest $request)
     {
-    $trend = $this->countByDays($request, Order::class, 'created_at')
-            ->showLatestValue();
+        $trend = $this->countByDays($request, Order::where('status', 'completed'), 'created_at')
+                ->showLatestValue();
 
-    Log::info('Nova Metric OrdersLast7Days computed', ['trend' => $trend]);
+        Log::info('Nova Metric OrdersLast7Days computed', ['trend' => $trend]);
 
-    return $trend;
+        return $trend;
     }
 
     /**

@@ -5,9 +5,9 @@ namespace App\Nova\Metrics;
 use App\Models\Order;
 use Laravel\Nova\Http\Requests\NovaRequest;
 use Laravel\Nova\Metrics\Value;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
-class OrdersThisMonth extends Value
+class CreditPaidOrdersCount extends Value
 {
     /**
      * Calculate the value of the metric.
@@ -17,14 +17,23 @@ class OrdersThisMonth extends Value
      */
     public function calculate(NovaRequest $request)
     {
-        $count = Order::whereMonth('created_at', now()->month)
-                ->whereYear('created_at', now()->year)
-                ->where('status', 'completed')
-                ->count();
+        $query = Order::where('credit_used', '>', 0);
 
-        Log::info('Nova Metric OrdersThisMonth computed', ['count' => $count]);
+        // Check if OrderGiveawayFilter is applied
+        $filtersParam = $request->query('orders_filter');
+        if ($filtersParam) {
+            $decodedFilters = json_decode(base64_decode($filtersParam), true);
+            if (is_array($decodedFilters) && isset($decodedFilters[0]['App\\Nova\\Filters\\OrderGiveawayFilter'])) {
+                $giveawayId = $decodedFilters[0]['App\\Nova\\Filters\\OrderGiveawayFilter'];
+                $query->whereHas('giveaways', function ($q) use ($giveawayId) {
+                    $q->where('giveaways.id', $giveawayId);
+                });
+            }
+        }
 
-        return $this->result($count);
+        $count = $query->count();
+
+        return $this->result($count)->format('0,0');
     }
 
     /**
@@ -54,7 +63,7 @@ class OrdersThisMonth extends Value
      */
     public function uriKey()
     {
-        return 'orders-this-month';
+        return 'credit-paid-orders-count';
     }
 
     /**
@@ -64,6 +73,6 @@ class OrdersThisMonth extends Value
      */
     public function name()
     {
-        return 'Orders This Month';
+        return 'Credit Paid Orders Count';
     }
 }

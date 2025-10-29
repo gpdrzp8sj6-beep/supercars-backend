@@ -186,4 +186,341 @@ class Order extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    /**
+     * Get transaction sheets that contain this order's payment record
+     */
+    public function getMatchingTransactionSheets()
+    {
+        return \App\Models\TransactionSheet::where('giveaway_id', function ($query) {
+            $query->select('giveaway_id')
+                  ->from('giveaway_order')
+                  ->where('order_id', $this->id)
+                  ->limit(1);
+        })
+        ->where(function ($query) {
+            $query->whereJsonContains('details->transactions', ['user_id' => $this->user_id, 'order_id' => $this->id])
+                  ->orWhere(function ($subQuery) {
+                      $subQuery->whereJsonContains('details->transactions', ['merchant_tx_id' => (string)$this->id])
+                               ->whereJsonContains('details->transactions', ['order_id' => $this->id]);
+                  });
+        })
+        ->with('giveaway')
+        ->get();
+    }
+
+    /**
+     * Check if this order has a payment record in any transaction sheet
+     */
+    public function hasPaymentRecord()
+    {
+        return $this->getMatchingTransactionSheets()->isNotEmpty();
+    }
+
+    /**
+     * Get detailed matching information for this order
+     */
+    public function getDetailedMatchingInfo()
+    {
+        $giveawayIds = $this->giveaways->pluck('id')->toArray();
+        $userEmail = $this->user->email ?? null;
+        $orderTotal = $this->total;
+
+        $matchingInfo = [
+            'order_id' => $this->id,
+            'user_id' => $this->user_id,
+            'user_email' => $userEmail,
+            'order_total' => $orderTotal,
+            'giveaway_ids' => $giveawayIds,
+            'status' => $this->status,
+            'matches' => [],
+            'mismatches' => [],
+            'overall_match_status' => 'no_transaction_sheets',
+        ];
+
+        // Get all transaction sheets for the giveaways this order is associated with
+        $transactionSheets = \App\Models\TransactionSheet::whereIn('giveaway_id', $giveawayIds)
+            ->with('giveaway')
+            ->get();
+
+        if ($transactionSheets->isEmpty()) {
+            $matchingInfo['mismatches'][] = [
+                'type' => 'no_transaction_sheets',
+                'message' => 'No transaction sheets found for associated giveaways',
+                'giveaway_ids' => $giveawayIds
+            ];
+            return $matchingInfo;
+        }
+
+        $hasAnyMatch = false;
+        $bestMatch = null;
+        $bestMatchScore = 0;
+        $allMatches = [];
+        $exactMatches = []; // Store exact matches (user_id + amount + email)
+
+        foreach ($transactionSheets as $sheet) {
+            $sheetMatches = [];
+            $sheetMismatches = [];
+
+            // Look for transactions in this sheet
+            $transactions = $sheet->details['transactions'] ?? [];
+
+            foreach ($transactions as $transaction) {
+                $matchScore = 0;
+                $matchDetails = [];
+
+                // Check user ID match
+                $userIdMatch = false;
+                if (isset($transaction['user_id']) && $transaction['user_id'] == $this->user_id) {
+                    $userIdMatch = true;
+                    $matchScore += 3;
+                    $matchDetails[] = 'user_id';
+                } elseif (isset($transaction['merchant_tx_id']) && $transaction['merchant_tx_id'] == $this->id) {
+                    $userIdMatch = true;
+                    $matchScore += 3;
+                    $matchDetails[] = 'merchant_tx_id';
+                }
+
+                // Check email match (if available in transaction data)
+                $emailMatch = false;
+                if ((isset($transaction['email']) && $userEmail && strcasecmp($transaction['email'], $userEmail) === 0) ||
+                    (isset($transaction['customer_email']) && $userEmail && strcasecmp($transaction['customer_email'], $userEmail) === 0)) {
+                    $emailMatch = true;
+                    $matchScore += 2;
+                    $matchDetails[] = 'email';
+                }
+
+                // Check amount match
+                $amountMatch = false;
+                $transactionAmount = isset($transaction['amount']) ? (float) $transaction['amount'] : 0;
+                if (abs($transactionAmount - $orderTotal) < 0.01) { // Allow for small floating point differences
+                    $amountMatch = true;
+                    $matchScore += 2;
+                    $matchDetails[] = 'amount';
+                }
+
+                // Check order ID match
+                $orderIdMatch = false;
+                if (isset($transaction['order_id']) && $transaction['order_id'] == $this->id) {
+                    $orderIdMatch = true;
+                    $matchScore += 1;
+                    $matchDetails[] = 'order_id';
+                }
+
+                if ($userIdMatch || $emailMatch || $amountMatch) {
+                    $hasAnyMatch = true;
+
+                    $matchData = [
+                        'sheet_id' => $sheet->id,
+                        'sheet_filename' => $sheet->filename,
+                        'giveaway_id' => $sheet->giveaway_id,
+                        'giveaway_title' => $sheet->giveaway->title ?? 'Unknown',
+                        'transaction' => $transaction,
+                        'match_score' => $matchScore,
+                        'matched_fields' => $matchDetails,
+                    ];
+
+                    $allMatches[] = $matchData;
+
+                    // Track exact matches (high confidence)
+                    if ($matchScore >= 5) { // user_id + email or user_id + amount, etc.
+                        $exactMatches[] = $matchData;
+                    }
+
+                    if ($matchScore > $bestMatchScore) {
+                        $bestMatchScore = $matchScore;
+                        $bestMatch = $matchData;
+                    }
+
+                    $sheetMatches[] = [
+                        'transaction' => $transaction,
+                        'matched_fields' => $matchDetails,
+                        'match_score' => $matchScore,
+                        'user_id_match' => $userIdMatch,
+                        'email_match' => $emailMatch,
+                        'amount_match' => $amountMatch,
+                        'order_id_match' => $orderIdMatch,
+                    ];
+                }
+            }
+
+            if (!empty($sheetMatches)) {
+                // Group matches by type for this sheet
+                $groupedMatches = [];
+                foreach ($sheetMatches as $match) {
+                    $key = implode(',', $match['matched_fields']) . '_score_' . $match['match_score'];
+                    if (!isset($groupedMatches[$key])) {
+                        $groupedMatches[$key] = [
+                            'fields' => $match['matched_fields'],
+                            'score' => $match['match_score'],
+                            'transactions' => []
+                        ];
+                    }
+                    $groupedMatches[$key]['transactions'][] = $match;
+                }
+
+                $matchingInfo['matches'][] = [
+                    'sheet_id' => $sheet->id,
+                    'sheet_filename' => $sheet->filename,
+                    'giveaway_id' => $sheet->giveaway_id,
+                    'giveaway_title' => $sheet->giveaway->title ?? 'Unknown',
+                    'transaction_matches' => $sheetMatches,
+                    'grouped_matches' => $groupedMatches,
+                    'total_matches' => count($sheetMatches),
+                ];
+            } else {
+                $sheetMismatches[] = [
+                    'sheet_id' => $sheet->id,
+                    'sheet_filename' => $sheet->filename,
+                    'reason' => 'no_matching_transactions',
+                    'message' => 'No transactions in this sheet match the order criteria'
+                ];
+            }
+
+            if (!empty($sheetMismatches)) {
+                $matchingInfo['mismatches'] = array_merge($matchingInfo['mismatches'], $sheetMismatches);
+            }
+        }
+
+        // Determine overall match status
+        if ($hasAnyMatch) {
+            $matchingInfo['overall_match_status'] = 'matched';
+            $matchingInfo['best_match'] = $bestMatch;
+            $matchingInfo['all_matches'] = $allMatches;
+            $matchingInfo['total_match_count'] = count($allMatches);
+            $matchingInfo['exact_matches'] = $exactMatches;
+            $matchingInfo['exact_match_count'] = count($exactMatches);
+        } else {
+            $matchingInfo['overall_match_status'] = 'no_matches';
+            $matchingInfo['mismatches'][] = [
+                'type' => 'no_matches_found',
+                'message' => 'No matching transactions found in any transaction sheet for this order'
+            ];
+        }
+
+        return $matchingInfo;
+    }
+
+    /**
+     * Get a human-readable summary of matching status
+     */
+    public function getMatchingSummary()
+    {
+        $info = $this->getDetailedMatchingInfo();
+
+        switch ($info['overall_match_status']) {
+            case 'matched':
+                $bestMatch = $info['best_match'];
+                $matchedFields = implode(', ', $bestMatch['matched_fields']);
+                return "✅ Payment record found in sheet #{$bestMatch['sheet_id']} ({$bestMatch['sheet_filename']}) - Matched: {$matchedFields}";
+
+            case 'no_transaction_sheets':
+                return "⚠️ No transaction sheets available for associated giveaways";
+
+            case 'no_matches':
+                return "❌ No matching payment records found in transaction sheets";
+
+            default:
+                return "❓ Unable to determine matching status";
+        }
+    }
+
+    /**
+     * Get detailed mismatch information for logging/debugging
+     */
+    public function getMismatchDetails()
+    {
+        $info = $this->getDetailedMatchingInfo();
+        return $info['mismatches'];
+    }
+
+    /**
+     * Log comprehensive matching information for this order
+     */
+    public function logMatchingInfo($context = 'manual_check')
+    {
+        $info = $this->getDetailedMatchingInfo();
+
+        Log::info('Order Payment Matching Analysis', [
+            'context' => $context,
+            'order_id' => $info['order_id'],
+            'user_id' => $info['user_id'],
+            'user_email' => $info['user_email'],
+            'order_total' => $info['order_total'],
+            'order_status' => $info['status'],
+            'giveaway_ids' => $info['giveaway_ids'],
+            'overall_match_status' => $info['overall_match_status'],
+            'matches_count' => count($info['matches']),
+            'mismatches_count' => count($info['mismatches']),
+            'best_match_score' => $info['best_match']['match_score'] ?? 0,
+            'best_match_sheet_id' => $info['best_match']['sheet_id'] ?? null,
+            'matched_fields' => $info['best_match']['matched_fields'] ?? [],
+            'mismatch_details' => $info['mismatches'],
+            'timestamp' => now()->toISOString(),
+        ]);
+
+        return $info;
+    }
+
+    /**
+     * Get a summary of what fields matched and didn't match
+     */
+    public function getFieldMatchingAnalysis()
+    {
+        $info = $this->getDetailedMatchingInfo();
+        $analysis = [
+            'order_id' => $this->id,
+            'user_email' => $this->user->email ?? null,
+            'order_amount' => $this->total,
+            'matched_fields' => [],
+            'unmatched_fields' => [],
+            'field_match_details' => []
+        ];
+
+        if ($info['overall_match_status'] === 'matched' && isset($info['best_match'])) {
+            $bestMatch = $info['best_match'];
+            $transaction = $bestMatch['transaction'];
+
+            // Check each field
+            $fieldChecks = [
+                'user_id' => [
+                    'order_value' => $this->user_id,
+                    'transaction_value' => $transaction['user_id'] ?? $transaction['merchant_tx_id'] ?? null,
+                    'matched' => in_array('user_id', $bestMatch['matched_fields']) || in_array('merchant_tx_id', $bestMatch['matched_fields'])
+                ],
+                'email' => [
+                    'order_value' => $this->user->email ?? null,
+                    'transaction_value' => $transaction['email'] ?? null,
+                    'matched' => in_array('email', $bestMatch['matched_fields'])
+                ],
+                'amount' => [
+                    'order_value' => $this->total,
+                    'transaction_value' => $transaction['amount'] ?? null,
+                    'matched' => in_array('amount', $bestMatch['matched_fields'])
+                ],
+                'order_id' => [
+                    'order_value' => $this->id,
+                    'transaction_value' => $transaction['order_id'] ?? null,
+                    'matched' => in_array('order_id', $bestMatch['matched_fields'])
+                ]
+            ];
+
+            foreach ($fieldChecks as $field => $check) {
+                if ($check['matched']) {
+                    $analysis['matched_fields'][] = $field;
+                } else {
+                    $analysis['unmatched_fields'][] = $field;
+                }
+
+                $analysis['field_match_details'][$field] = [
+                    'matched' => $check['matched'],
+                    'order_value' => $check['order_value'],
+                    'transaction_value' => $check['transaction_value'],
+                    'values_match' => $check['order_value'] == $check['transaction_value']
+                ];
+            }
+        }
+
+        return $analysis;
+    }
 }

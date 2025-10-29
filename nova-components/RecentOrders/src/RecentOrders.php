@@ -27,7 +27,7 @@ class RecentOrders extends Card
      */
     public function jsonSerialize(): array
     {
-        $recentOrders = Order::latest()->take(5)->get(['id', 'status', 'total', 'created_at']);
+        $recentOrders = Order::where('status', 'completed')->latest()->take(5)->get(['id', 'status', 'total', 'created_at']);
 
         return array_merge(parent::jsonSerialize(), [
             'recentOrders' => $recentOrders,

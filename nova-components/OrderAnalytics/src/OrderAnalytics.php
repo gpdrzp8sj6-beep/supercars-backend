@@ -33,7 +33,9 @@ class OrderAnalytics extends Card
         // Get order counts for the last 7 days
         for ($i = 6; $i >= 0; $i--) {
             $date = Carbon::now()->subDays($i)->toDateString();
-            $count = Order::whereDate('created_at', $date)->count();
+            $count = Order::whereDate('created_at', $date)
+                         ->where('status', 'completed')
+                         ->count();
 
             $data[] = [
                 'date' => $date,

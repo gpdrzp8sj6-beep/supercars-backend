@@ -165,4 +165,9 @@ public function getTicketsTotalDisplayAttribute()
                             ->withPivot('numbers')
                             ->withTimestamps();
       }
+
+    public function transactionSheets()
+    {
+        return $this->hasMany(TransactionSheet::class);
+    }
 }

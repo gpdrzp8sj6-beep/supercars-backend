@@ -1444,11 +1444,13 @@ class PaymentController extends Controller
 
     private function getAvailableNumbers($giveaway, $amount, $requestedNumbers = [])
     {
-        // Get all taken numbers for this giveaway
+        // Get all taken numbers for this giveaway from COMPLETED orders only
         $takenNumbers = DB::table('giveaway_order')
-            ->where('giveaway_id', $giveaway->id)
-            ->orderBy('id')
-            ->pluck('numbers')
+            ->join('orders', 'giveaway_order.order_id', '=', 'orders.id')
+            ->where('giveaway_order.giveaway_id', $giveaway->id)
+            ->where('orders.status', 'completed')  // CRITICAL: Only consider completed orders
+            ->orderBy('giveaway_order.id')
+            ->pluck('giveaway_order.numbers')
             ->filter()
             ->flatMap(function ($jsonNumbers) {
                 return json_decode($jsonNumbers, true) ?: [];
