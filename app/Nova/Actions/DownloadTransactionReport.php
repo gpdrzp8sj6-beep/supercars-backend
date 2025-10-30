@@ -70,42 +70,71 @@ class DownloadTransactionReport extends Action
     {
         $sheet = $models->first();
 
-        $filename = 'transaction_report_' . $sheet->filename . '_' . now()->format('Y-m-d_H-i-s') . '.csv';
+        if (!$sheet) {
+            return ActionResponse::danger('No transaction sheet selected.');
+        }
 
-        $headers = [
-            'Content-Type' => 'text/csv',
-            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
-        ];
+        $filename = 'transaction_report_' . str_replace('.csv', '', $sheet->filename) . '_' . now()->format('Y-m-d_H-i-s') . '.csv';
 
-        $callback = function () use ($sheet) {
-            $file = fopen('php://output', 'w');
+        // Generate CSV content
+        $csvContent = $this->generateCsvContent($sheet);
 
-            // Summary
-            fputcsv($file, ['Transaction Sheet Report']);
-            fputcsv($file, ['Filename', $sheet->filename]);
-            fputcsv($file, ['Generated', now()->format('Y-m-d H:i:s')]);
-            fputcsv($file, ['Total Transactions', $sheet->summary['total_transactions'] ?? 0]);
-            fputcsv($file, ['Matched Orders', $sheet->summary['matched_orders'] ?? 0]);
-            fputcsv($file, ['Unmatched Transactions', $sheet->summary['unmatched_transactions'] ?? 0]);
-            fputcsv($file, ['Total Revenue', '£' . number_format($sheet->summary['total_revenue'] ?? 0, 2)]);
-            fputcsv($file, ['Total Credit Used', '£' . number_format($sheet->summary['credit_used_total'] ?? 0, 2)]);
-            fputcsv($file, ['Paid with Credit Only', $sheet->summary['paid_with_credit'] ?? 0]);
-            fputcsv($file, ['Paid with Gateway', $sheet->summary['paid_with_gateway'] ?? 0]);
-            fputcsv($file, ['Mixed Payments', $sheet->summary['mixed_payments'] ?? 0]);
-            fputcsv($file, []); // Empty row
+        // Store temporary file
+        $tempPath = storage_path('app/temp/' . $filename);
+        
+        // Ensure temp directory exists
+        $tempDir = dirname($tempPath);
+        if (!is_dir($tempDir)) {
+            mkdir($tempDir, 0755, true);
+        }
 
-            // Details
-            if (!empty($sheet->details)) {
-                fputcsv($file, array_keys($sheet->details[0]));
-                foreach ($sheet->details as $row) {
-                    fputcsv($file, $row);
-                }
+        // Write CSV to temp file
+        file_put_contents($tempPath, $csvContent);
+
+        // Return downloadable response with full URL
+        return ActionResponse::download(
+            $filename,
+            route('nova.download.temp', ['filename' => $filename])
+        );
+    }
+
+    /**
+     * Generate CSV content for transaction report
+     */
+    private function generateCsvContent($sheet): string
+    {
+        $csv = fopen('php://temp', 'r+');
+
+        // Summary
+        fputcsv($csv, ['Transaction Sheet Report']);
+        fputcsv($csv, ['Filename', $sheet->filename]);
+        fputcsv($csv, ['Giveaway', $sheet->giveaway ? $sheet->giveaway->title : 'N/A']);
+        fputcsv($csv, ['Generated', now()->format('Y-m-d H:i:s')]);
+        fputcsv($csv, ['Total Transactions', $sheet->summary['total_transactions'] ?? 0]);
+        fputcsv($csv, ['Matched Orders', $sheet->summary['matched_orders'] ?? 0]);
+        fputcsv($csv, ['Unmatched Orders', $sheet->summary['unmatched_orders'] ?? 0]);
+        fputcsv($csv, ['Total Revenue', '£' . number_format($sheet->summary['total_revenue'] ?? 0, 2)]);
+        fputcsv($csv, ['Total Credit Used', '£' . number_format($sheet->summary['credit_used_total'] ?? 0, 2)]);
+        fputcsv($csv, ['Paid with Credit Only', $sheet->summary['paid_with_credit'] ?? 0]);
+        fputcsv($csv, ['Paid with Gateway', $sheet->summary['paid_with_gateway'] ?? 0]);
+        fputcsv($csv, ['Mixed Payments', $sheet->summary['mixed_payments'] ?? 0]);
+        fputcsv($csv, []); // Empty row
+
+        // Transaction Details
+        $transactions = $sheet->details['transactions'] ?? [];
+        
+        if (!empty($transactions)) {
+            fputcsv($csv, array_keys($transactions[0]));
+            foreach ($transactions as $row) {
+                fputcsv($csv, $row);
             }
+        }
 
-            fclose($file);
-        };
+        rewind($csv);
+        $content = stream_get_contents($csv);
+        fclose($csv);
 
-        return response()->stream($callback, 200, $headers);
+        return $content;
     }
 
     /**

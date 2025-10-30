@@ -46,7 +46,6 @@ class TestTransactionProcessing extends Command
         $report = [
             'total_transactions' => count($data),
             'matched_orders' => 0,
-            'unmatched_transactions' => 0,
             'total_revenue' => 0,
             'credit_used_total' => 0,
             'paid_with_credit' => 0,
@@ -132,7 +131,6 @@ class TestTransactionProcessing extends Command
                     'Transaction Date' => $transaction['Date'] ?? '',
                 ];
             } else {
-                $report['unmatched_transactions']++;
                 $details[] = [
                     'Transaction ID' => $transaction['Transaction ID'] ?? '',
                     'Merchant Transaction ID' => $checkoutId,
@@ -156,7 +154,6 @@ class TestTransactionProcessing extends Command
         $this->info("Processing complete:");
         $this->line("Total Transactions: " . $report['total_transactions']);
         $this->line("Matched Orders: " . $report['matched_orders']);
-        $this->line("Unmatched Transactions: " . $report['unmatched_transactions']);
         $this->line("Total Revenue: £" . number_format($report['total_revenue'], 2));
         $this->line("Total Credit Used: £" . number_format($report['credit_used_total'], 2));
         $this->line("Paid with Credit Only: " . $report['paid_with_credit']);

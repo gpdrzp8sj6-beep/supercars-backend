@@ -64,7 +64,6 @@ class TransactionSheet extends Model
             $totalRevenue = 0;
             $creditUsage = 0;
             $matchedOrders = 0;
-            $unmatchedTransactions = [];
 
             // Get all completed orders for the selected giveaway
             $giveawayOrders = Order::where('status', 'completed')
@@ -128,7 +127,6 @@ class TransactionSheet extends Model
                     $transactionData['order_id'] = null;
                     $transactionData['user_id'] = null;
                     $transactionData['status'] = $this->getTransactionStatus($transactionData);
-                    $unmatchedTransactions[] = $transactionData;
                 }
 
                 $transactions[] = $transactionData;
@@ -142,6 +140,8 @@ class TransactionSheet extends Model
                     'order_id' => $order->id,
                     'user_email' => $order->user->email ?? 'N/A',
                     'order_total' => $order->total,
+                    'credit_used' => $order->credit_used ?? 0,
+                    'original_total' => $order->original_total ?? $order->total,
                     'ticket_numbers' => $order->giveaways->first()?->pivot?->numbers ?? [],
                     'ticket_amount' => $order->giveaways->first()?->pivot?->amount ?? 0,
                 ];
@@ -150,7 +150,6 @@ class TransactionSheet extends Model
             $this->summary = [
                 'total_transactions' => count($transactions),
                 'matched_orders' => $matchedOrders,
-                'unmatched_transactions' => count($unmatchedTransactions),
                 'unmatched_orders' => count($unmatchedOrders),
                 'total_revenue' => $totalRevenue,
                 'credit_usage' => $creditUsage,
@@ -160,7 +159,6 @@ class TransactionSheet extends Model
 
             $this->details = [
                 'transactions' => $transactions,
-                'unmatched_transactions' => $unmatchedTransactions,
                 'unmatched_orders' => $unmatchedOrders,
             ];
 

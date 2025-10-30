@@ -138,7 +138,6 @@ class TransactionSheetTool extends Tool
         $report = [
             'total_transactions' => count($transactions),
             'matched_orders' => 0,
-            'unmatched_transactions' => 0,
             'total_revenue' => 0,
             'credit_used_total' => 0,
             'paid_with_credit' => 0,
@@ -198,7 +197,6 @@ class TransactionSheetTool extends Tool
                     'Transaction Date' => $transaction['Date'] ?? '',
                 ];
             } else {
-                $report['unmatched_transactions']++;
                 $details[] = [
                     'Transaction ID' => $transaction['Transaction ID'] ?? '',
                     'Merchant Transaction ID' => $checkoutId,

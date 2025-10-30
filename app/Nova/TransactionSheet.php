@@ -85,10 +85,6 @@ class TransactionSheet extends Resource
                 return $this->summary['matched_orders'] ?? 0;
             })->onlyOnIndex(),
 
-            Number::make('Unmatched Transactions', function () {
-                return $this->summary['unmatched_transactions'] ?? 0;
-            })->onlyOnIndex(),
-
             Number::make('Unmatched Orders', function () {
                 return $this->summary['unmatched_orders'] ?? 0;
             })->onlyOnIndex(),
@@ -174,7 +170,7 @@ class TransactionSheet extends Resource
         return [];
     }
 
-    /**
+        /**
      * Get the actions available for the resource.
      *
      * @return array<int, \Laravel\Nova\Actions\Action>
@@ -183,6 +179,7 @@ class TransactionSheet extends Resource
     {
         return [
             new \App\Nova\Actions\DownloadTransactionReport,
+            new \App\Nova\Actions\DownloadUnmatchedOrdersReport,
             new \App\Nova\Actions\ShowMissingOrdersAnalytics,
         ];
     }
