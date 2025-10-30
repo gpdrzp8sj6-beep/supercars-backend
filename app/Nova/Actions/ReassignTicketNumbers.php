@@ -359,16 +359,18 @@ class ReassignTicketNumbers extends Action
 
     private function checkUnavailableNumbers($giveaway, $requestedNumbers, $excludeOrderId = null)
     {
-        // Get all taken numbers for this giveaway, excluding the current order if specified
+        // Get all taken numbers for this giveaway from completed orders only
         $query = DB::table('giveaway_order')
-            ->where('giveaway_id', $giveaway->id);
+            ->join('orders', 'giveaway_order.order_id', '=', 'orders.id')
+            ->where('giveaway_order.giveaway_id', $giveaway->id)
+            ->where('orders.status', 'completed');
 
         if ($excludeOrderId) {
-            $query->where('order_id', '!=', $excludeOrderId);
+            $query->where('giveaway_order.order_id', '!=', $excludeOrderId);
         }
 
-        $takenNumbers = $query->orderBy('id')
-            ->pluck('numbers')
+        $takenNumbers = $query->orderBy('giveaway_order.id')
+            ->pluck('giveaway_order.numbers')
             ->filter()
             ->flatMap(function ($jsonNumbers) {
                 return json_decode($jsonNumbers, true) ?: [];
@@ -393,16 +395,18 @@ class ReassignTicketNumbers extends Action
 
     private function getAvailableNumbers($giveaway, $amount, $requestedNumbers = [], $excludeOrderId = null)
     {
-        // Get all taken numbers for this giveaway, excluding the current order if specified
+        // Get all taken numbers for this giveaway from completed orders only
         $query = DB::table('giveaway_order')
-            ->where('giveaway_id', $giveaway->id);
+            ->join('orders', 'giveaway_order.order_id', '=', 'orders.id')
+            ->where('giveaway_order.giveaway_id', $giveaway->id)
+            ->where('orders.status', 'completed');
 
         if ($excludeOrderId) {
-            $query->where('order_id', '!=', $excludeOrderId);
+            $query->where('giveaway_order.order_id', '!=', $excludeOrderId);
         }
 
-        $takenNumbers = $query->orderBy('id')
-            ->pluck('numbers')
+        $takenNumbers = $query->orderBy('giveaway_order.id')
+            ->pluck('giveaway_order.numbers')
             ->filter()
             ->flatMap(function ($jsonNumbers) {
                 return json_decode($jsonNumbers, true) ?: [];
