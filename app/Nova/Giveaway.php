@@ -140,6 +140,16 @@ class Giveaway extends Resource
      */
     public function cards(NovaRequest $request): array
     {
+        // Only show cards on detail page, not on index
+        if ($request->resourceId) {
+            return [
+                (new \App\Nova\Metrics\GiveawayRevenue())->width('1/4')->onlyOnDetail(),
+                (new \App\Nova\Metrics\GiveawayOrders())->width('1/4')->onlyOnDetail(),
+                (new \App\Nova\Metrics\GiveawayTicketsSold())->width('1/4')->onlyOnDetail(),
+                (new \App\Nova\Metrics\GiveawayAverageOrderValue())->width('1/4')->onlyOnDetail(),
+            ];
+        }
+        
         return [];
     }
 
