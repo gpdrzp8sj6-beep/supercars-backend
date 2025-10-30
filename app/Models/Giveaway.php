@@ -113,7 +113,10 @@ protected function uploadImageToArray($file, $index)
 
     public function getTicketsSoldAttribute()
     {
-        $orders = $this->orders()->get();
+        // Only count tickets from completed orders
+        $orders = $this->orders()
+            ->where('orders.status', 'completed')
+            ->get();
 
         $totalAssigned = 0;
 

@@ -71,13 +71,36 @@ class Giveaway extends Resource
                 ->readonly(),
             Currency::make('Alternative prize', 'alternative_prize'),
             Currency::make('Price per ticket', 'price'),
-            Number::make('Total Tickets', 'ticketsTotal'),
-            Text::make('Remaining Tickets', function () {
+            Number::make('Total Tickets', 'ticketsTotal')->sortable(),
+            Number::make('Tickets Sold', 'ticketsSold')->sortable()->readonly(),
+            Number::make('Available Tickets', function () {
                 $total = (int) ($this->ticketsTotal ?? 0);
                 $sold = (int) ($this->ticketsSold ?? 0);
-                $remaining = max(0, $total - $sold);
-                return (string) $remaining;
-            })->onlyOnDetail()->readonly(),
+                return max(0, $total - $sold);
+            })->sortable(),
+            Text::make('Ticket Status', function () {
+                $total = (int) ($this->ticketsTotal ?? 0);
+                $sold = (int) ($this->ticketsSold ?? 0);
+                $available = max(0, $total - $sold);
+                $percentage = $total > 0 ? round(($sold / $total) * 100, 1) : 0;
+                
+                return sprintf(
+                    '<div style="font-size: 13px;">
+                        <div style="margin-bottom: 8px;">
+                            <strong>Total:</strong> %s | <strong style="color: #10b981;">Taken:</strong> %s | <strong style="color: #3b82f6;">Available:</strong> %s
+                        </div>
+                        <div style="background: #e5e7eb; border-radius: 4px; height: 8px; overflow: hidden;">
+                            <div style="background: #f59e0b; height: 100%%; width: %s%%;"></div>
+                        </div>
+                        <div style="margin-top: 4px; font-size: 11px; color: #6b7280;">%s%% sold</div>
+                    </div>',
+                    number_format($total),
+                    number_format($sold),
+                    number_format($available),
+                    $percentage,
+                    $percentage
+                );
+            })->asHtml()->onlyOnDetail(),
             Number::make('Tickets per User', 'ticketsPerUser'),
             Number::make('No. of winners', 'manyWinners'),
             Boolean::make('Auto draw', 'autoDraw'),
