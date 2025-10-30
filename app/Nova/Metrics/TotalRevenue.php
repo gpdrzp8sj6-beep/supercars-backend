@@ -17,8 +17,19 @@ class TotalRevenue extends Value
      */
     public function calculate(NovaRequest $request)
     {
-    $sum = Order::where('status', 'completed')->sum('total');
-    Log::info('Nova Metric TotalRevenue computed', ['sum' => $sum]);
+    // Calculate total revenue including both gateway payments and credits used
+    $orders = Order::where('status', 'completed')
+        ->selectRaw('SUM(total) as gateway_total, SUM(credit_used) as credit_total')
+        ->first();
+    
+    $sum = ($orders->gateway_total ?? 0) + ($orders->credit_total ?? 0);
+    
+    Log::info('Nova Metric TotalRevenue computed', [
+        'gateway_total' => $orders->gateway_total,
+        'credit_total' => $orders->credit_total,
+        'total_revenue' => $sum
+    ]);
+    
     // Nova's Value supports currency via ->currency(), but returning the raw value
     // ensures it's visible. Nova will format the number itself in the UI.
     return $this->result($sum)->currency('GBP');

@@ -30,12 +30,13 @@ class RevenueAnalytics extends Card
     {
         $data = [];
 
-        // Calculate revenue for different periods
+        // Calculate revenue for different periods (including credit_used)
         $data[] = [
             'period' => 'Today',
             'revenue' => Order::whereDate('created_at', Carbon::today())
                              ->where('status', 'completed')
-                             ->sum('total'),
+                             ->selectRaw('SUM(total + credit_used) as total_revenue')
+                             ->value('total_revenue') ?? 0,
             'label' => 'Today',
         ];
 
@@ -45,7 +46,8 @@ class RevenueAnalytics extends Card
                 Carbon::now()->startOfWeek(),
                 Carbon::now()->endOfWeek()
             ])->where('status', 'completed')
-              ->sum('total'),
+              ->selectRaw('SUM(total + credit_used) as total_revenue')
+              ->value('total_revenue') ?? 0,
             'label' => 'This Week',
         ];
 
@@ -54,7 +56,8 @@ class RevenueAnalytics extends Card
             'revenue' => Order::whereYear('created_at', Carbon::now()->year)
                             ->whereMonth('created_at', Carbon::now()->month)
                             ->where('status', 'completed')
-                            ->sum('total'),
+                            ->selectRaw('SUM(total + credit_used) as total_revenue')
+                            ->value('total_revenue') ?? 0,
             'label' => 'This Month',
         ];
 
@@ -62,7 +65,8 @@ class RevenueAnalytics extends Card
             'period' => 'This Year',
             'revenue' => Order::whereYear('created_at', Carbon::now()->year)
                              ->where('status', 'completed')
-                             ->sum('total'),
+                             ->selectRaw('SUM(total + credit_used) as total_revenue')
+                             ->value('total_revenue') ?? 0,
             'label' => 'This Year',
         ];
 
