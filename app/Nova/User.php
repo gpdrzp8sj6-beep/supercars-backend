@@ -147,6 +147,12 @@ class User extends Resource
                 ->showOnDetail()
                 ->confirmText('Are you sure you want to add credit to this user?')
                 ->confirmButtonText('Add Credit'),
+
+            (new \App\Nova\Actions\ManualOrderCreation())
+                ->showOnTableRow()
+                ->showOnDetail()
+                ->confirmText('Create a new order for this user?')
+                ->confirmButtonText('Create Order'),
         ];
     }
 }

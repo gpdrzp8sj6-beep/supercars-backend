@@ -30,7 +30,7 @@ class Giveaway extends Resource
      *
      * @var string
      */
-    public static $title = 'id';
+    public static $title = 'title';
 
     /**
      * The columns that should be searched.
@@ -38,7 +38,7 @@ class Giveaway extends Resource
      * @var array
      */
     public static $search = [
-        'id',
+        'id', 'title',
     ];
 
     /**
